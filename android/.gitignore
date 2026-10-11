@@ -1,0 +1,14 @@
+# Fichiers générés / locaux (jamais versionnés)
+.gradle/
+build/
+shell/build/
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+.idea/
+*.iml
+captures/
+dist/
+.kotlin/

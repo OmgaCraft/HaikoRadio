@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!--
+        Politique de sécurité : l'application ne charge que ses propres fichiers, le son des deux flux
+        d'Infomaniak et les pochettes du site. Rien d'autre n'est autorisé.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' https://radio.omgacraft.fr https://*.infomaniak.com data:; media-src https://haikoradio.ice.infomaniak.ch https://haikoradio.radiohls.infomaniak.com blob:; connect-src 'self' https://haikoradio.radiohls.infomaniak.com https://radio.omgacraft.fr; worker-src blob:">
+    <title>HaikoRadio</title>
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/site.css">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="js/theme.js"></script>
+</head>
+<body>
+    <div class="wrapper">
+        <header class="topbar">
+            <a class="brand" href="#radio" data-view-link="radio">
+                <span class="brand-mark"></span>
+                HaikoRadio
+            </a>
+            <nav class="topbar-actions" aria-label="Navigation">
+                <a class="nav-link active" href="#radio" data-view-link="radio">Radio</a>
+                <a class="nav-link" href="#planning" data-view-link="planning">Planning</a>
+                <button class="theme-toggle" data-theme-toggle type="button" title="Changer de thème" aria-label="Changer de thème">
+                    <span class="icon-sun">☀️</span>
+                    <span class="icon-moon">🌙</span>
+                </button>
+            </nav>
+        </header>
+
+        <!-- ================= Radio ================= -->
+        <main class="view" id="view-radio" data-view="radio">
+            <div class="radio-layout">
+                <div class="col-main">
+                    <section class="player" id="player">
+                        <div class="equalizer" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                        </div>
+
+                        <button class="play-btn" id="play-btn" type="button" aria-label="Écouter la radio" disabled>
+                            <svg class="icon-play" viewBox="0 0 24 24" width="38" height="38" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.52.85l10.5-6.5a1 1 0 0 0 0-1.7L9.52 4.65A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg>
+                            <svg class="icon-pause" viewBox="0 0 24 24" width="38" height="38" aria-hidden="true"><rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/></svg>
+                        </button>
+
+                        <p class="player-status" id="player-status" role="status" aria-live="polite">Chargement du lecteur…</p>
+
+                        <div class="player-controls">
+                            <label class="volume">
+                                <span class="volume-label">Volume</span>
+                                <input id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="Volume">
+                            </label>
+
+                            <div class="quality" role="group" aria-label="Qualité du flux">
+                                <button type="button" class="quality-btn" data-mode="aac" aria-pressed="true">Qualité standard</button>
+                                <button type="button" class="quality-btn" data-mode="hls" aria-pressed="false">Mode économique</button>
+                            </div>
+                        </div>
+
+                        <audio id="audio" preload="none"></audio>
+                    </section>
+
+                    <section class="nowplaying" id="nowplaying" aria-label="Morceau en cours">
+                        <div class="np-cover" id="np-cover" aria-hidden="true">
+                            <span class="np-cover-fallback">♪</span>
+                            <img id="np-cover-img" alt="" hidden>
+                        </div>
+                        <div class="np-text">
+                            <p class="np-label"><span class="live-dot"></span> En ce moment<span id="np-show"></span></p>
+                            <h2 class="np-title" id="np-title">HaikoRadio</h2>
+                            <p class="np-artist" id="np-artist"></p>
+                            <p class="np-work" id="np-work"></p>
+                            <p class="np-album" id="np-album"></p>
+                            <p class="np-meta" id="np-meta"></p>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="col-side">
+                    <section class="panel today" id="today-panel" hidden>
+                        <h2>Au programme <span id="today-title">aujourd'hui</span></h2>
+                        <div class="nowbox nowbox-inline" id="nowbox-radio" data-nowbox hidden aria-live="polite">
+                            <p class="nowbox-show" data-nowbox-show></p>
+                            <p class="nowbox-until" data-nowbox-until></p>
+                        </div>
+                        <div id="today-list"></div>
+                        <p class="note"><a class="inline-link" href="#planning" data-view-link="planning">Voir tout le planning de la semaine</a> · heures de Paris</p>
+                    </section>
+
+                    <section class="panel" id="history-panel" hidden>
+                        <h2>Précédemment</h2>
+                        <ol class="history" id="history"></ol>
+                    </section>
+
+                    <p class="note offline-note" id="offline-note" hidden>Impossible de joindre le site pour le moment : les titres ne sont pas à jour.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- ================= Planning ================= -->
+        <main class="view" id="view-planning" data-view="planning" hidden>
+            <div class="hero hero-small">
+                <span class="kicker">Programmation</span>
+                <h1>Planning de la semaine</h1>
+                <p>Le même chaque semaine. Heures de Paris.</p>
+            </div>
+
+            <section class="nowbox" id="nowbox-planning" data-nowbox hidden aria-live="polite">
+                <p class="nowbox-label"><span class="live-dot"></span> En ce moment</p>
+                <p class="nowbox-show" data-nowbox-show></p>
+                <p class="nowbox-until" data-nowbox-until></p>
+            </section>
+
+            <div id="week-grid"></div>
+            <div class="week-list" id="week-list"></div>
+
+            <section class="panel panel-wide">
+                <h2>Les émissions</h2>
+                <ul class="legend" id="legend"></ul>
+            </section>
+
+            <p class="note center-note" id="planning-error" hidden>Le planning est momentanément indisponible.</p>
+        </main>
+
+        <footer>
+            © <span id="year"></span> OmégaCraft
+            <span class="dot">·</span>
+            <a href="https://radio.omgacraft.fr" target="_blank" rel="noopener">Site de la radio</a>
+            <span class="dot">·</span>
+            <a href="https://radio.omgacraft.fr/mentions-legales" target="_blank" rel="noopener">Mentions légales</a>
+            <span class="dot">·</span>
+            <span id="app-version"></span>
+        </footer>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/net.js"></script>
+    <script src="js/nowplaying.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/planning.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

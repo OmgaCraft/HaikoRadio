@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HaikoRadio — test du pont Android</title>
+<style>
+  body { margin: 0; padding: 16px; background: #0a0c11; color: #e9ebf1; font: 15px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 1.1rem; margin: 0 0 8px; }
+  p { color: #9aa3b5; margin: 4px 0 12px; }
+  button { margin: 4px 4px 4px 0; padding: 10px 14px; border-radius: 10px; border: 1px solid #333a4d; background: #161a24; color: #e9ebf1; font-size: 0.95rem; }
+  #state { padding: 10px 12px; border-radius: 10px; background: #161a24; margin: 12px 0; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; }
+  #log { font-family: monospace; font-size: 0.78rem; color: #9aa3b5; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
+</style>
+</head>
+<body>
+<h1>Test du pont Android</h1>
+<p>Page de développement : elle n'existe que dans les versions debug.</p>
+
+<div>
+  <button id="b-std">▶ Standard</button>
+  <button id="b-eco">▶ Économique</button>
+  <button id="b-stop">■ Stop</button>
+</div>
+<div>
+  <button id="b-break">Casser le flux direct</button>
+  <button id="b-fix">Réparer le flux direct</button>
+  <button id="b-api">Lire l'API du site</button>
+</div>
+<div id="state">état : —</div>
+<div id="log"></div>
+
+<script>
+(function () {
+  var logEl = document.getElementById('log'), stateEl = document.getElementById('state');
+  var lastState = null, waiters = [];
+
+  function log(msg) {
+    console.log(msg);
+    logEl.textContent = msg + '\n' + logEl.textContent;
+  }
+
+  var N = window.HaikoNative;
+  if (!N) { log('RESULT native=false'); stateEl.textContent = 'HaikoNative absent (page ouverte hors application ?)'; return; }
+  log('RESULT native=' + N.isNative() + ' platform=' + N.platform() + ' volume=' + N.hasVolumeControl());
+
+  window.addEventListener('haiko-native-state', function (e) {
+    lastState = e.detail;
+    stateEl.textContent = 'état : ' + JSON.stringify(lastState, null, 1);
+    log('STATE ' + JSON.stringify(lastState));
+    waiters = waiters.filter(function (w) { if (w.test(lastState)) { w.resolve(lastState); return false; } return true; });
+  });
+
+  function waitFor(label, test, timeoutMs) {
+    return new Promise(function (resolve) {
+      if (lastState && test(lastState)) { resolve(lastState); return; }
+      var timer = setTimeout(function () { log('RESULT TIMEOUT ' + label); resolve(null); }, timeoutMs || 25000);
+      waiters.push({ test: test, resolve: function (s) { clearTimeout(timer); resolve(s); } });
+    });
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  document.getElementById('b-std').onclick = function () { N.play('aac'); };
+  document.getElementById('b-eco').onclick = function () { N.play('hls'); };
+  document.getElementById('b-stop').onclick = function () { N.stop(); };
+  document.getElementById('b-break').onclick = function () { N.debugSetAacUrl('https://haikoradio.ice.infomaniak.ch/introuvable.aac'); log('flux direct cassé (test)'); };
+  document.getElementById('b-fix').onclick = function () { N.debugSetAacUrl(''); log('flux direct rétabli'); };
+  document.getElementById('b-api').onclick = function () { readApi(); };
+
+  function readApi() {
+    return fetch('https://radio.omgacraft.fr/api/now-playing', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { log('RESULT api=ok titre="' + j.now.title + '" artiste="' + j.now.artist + '" oeuvre="' + (j.now.work || '') + '" historique=' + j.history.length); return j; })
+      .catch(function (err) { log('RESULT api=ERREUR ' + err); });
+  }
+
+  // Scénario automatique : ouvrir la page avec ?auto=1
+  async function scenario() {
+    var s;
+    log('RESULT scenario=debut');
+    await waitFor('etat initial', function (st) { return !!st; }, 8000);
+
+    N.play('aac');
+    s = await waitFor('standard joue', function (st) { return st.status === 'playing'; });
+    log('RESULT standard: status=' + (s && s.status) + ' source=' + (s && s.source) + ' fallback=' + (s && s.fallback));
+    await sleep(6000);
+
+    N.setMode('hls');
+    s = await waitFor('economique joue', function (st) { return st.status === 'playing' && st.mode === 'hls'; });
+    log('RESULT economique: status=' + (s && s.status) + ' mode=' + (s && s.mode) + ' source=' + (s && s.source));
+    await sleep(8000);
+
+    N.setMode('aac');
+    s = await waitFor('retour standard', function (st) { return st.status === 'playing' && st.mode === 'aac'; });
+    log('RESULT retour standard: status=' + (s && s.status) + ' source=' + (s && s.source));
+    await sleep(3000);
+
+    N.stop();
+    s = await waitFor('arret', function (st) { return st.status === 'idle'; }, 8000);
+    log('RESULT arret: status=' + (s && s.status));
+
+    N.debugSetAacUrl('https://haikoradio.ice.infomaniak.ch/introuvable.aac');
+    N.play('aac');
+    s = await waitFor('repli', function (st) { return st.status === 'playing' && st.fallback === true; });
+    log('RESULT repli: status=' + (s && s.status) + ' source=' + (s && s.source) + ' fallback=' + (s && s.fallback) + ' mode=' + (s && s.mode) + ' message="' + (s && s.message) + '"');
+    await sleep(5000);
+    N.stop();
+    N.debugSetAacUrl('');
+    await waitFor('arret 2', function (st) { return st.status === 'idle'; }, 8000);
+
+    await readApi();
+    log('RESULT scenario=FIN');
+  }
+  if (location.search.indexOf('auto=1') !== -1) { scenario(); }
+  if (location.search.indexOf('keep=1') !== -1) { N.play('aac'); } // lance la radio et la laisse jouer (tests écran éteint)
+})();
+</script>
+</body>
+</html>

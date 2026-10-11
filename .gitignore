@@ -1,0 +1,25 @@
+# Dépendances et fabrication (se régénèrent avec npm)
+node_modules/
+desktop/dist/
+tools/node_modules/
+tools/package.json
+tools/package-lock.json
+
+# Captures et fichiers du test automatique
+captures/
+*.log
+
+# Android (quand il sera ajouté)
+android/**/build/
+android/.gradle/
+android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Windows / éditeurs
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

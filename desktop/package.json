@@ -1,0 +1,47 @@
+{
+  "name": "haikoradio-desktop",
+  "productName": "HaikoRadio",
+  "version": "0.1.0",
+  "description": "HaikoRadio — la webradio, en application Windows",
+  "author": "OmégaCraft",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "node scripts/dist.js"
+  },
+  "build": {
+    "appId": "fr.omgacraft.haikoradio",
+    "productName": "HaikoRadio",
+    "copyright": "© OmégaCraft",
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/tray.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../app",
+        "to": "app"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "HaikoRadio-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "HaikoRadio"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}

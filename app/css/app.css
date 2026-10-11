@@ -1,0 +1,44 @@
+/* Mise en page propre à l'application (les composants — lecteur, planning… — viennent de site.css, repris du site). */
+
+.view[hidden] { display: none; }
+
+/* ---- Accueil : lecteur à gauche, programme et historique à droite ---- */
+
+.radio-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 24px;
+    align-items: start;
+    padding-top: 6px;
+}
+
+@media (min-width: 960px) {
+    .radio-layout { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+}
+
+.radio-layout .player,
+.radio-layout .nowplaying,
+.radio-layout .panel {
+    max-width: none;
+    margin: 0 0 18px;
+}
+
+.offline-note {
+    margin: 0 0 18px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    text-align: center;
+}
+
+/* ---- Planning ---- */
+
+#view-planning .panel-wide { margin: 0 auto 18px; }
+
+/* ---- Sensation "application" : pas de sélection accidentelle ni de glisser-déposer des images ---- */
+
+.topbar, button, .quality, .play-btn { user-select: none; -webkit-user-select: none; }
+img { -webkit-user-drag: none; user-drag: none; }
+
+#app-version { white-space: nowrap; }

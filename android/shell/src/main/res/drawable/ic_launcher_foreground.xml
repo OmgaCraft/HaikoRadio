@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ondes radio : un point et deux arcs de chaque côté (zone centrale de 66 dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,49a5,5 0,1 0,0.01 0z" />
+    <path
+        android:pathData="M45,45a12,12 0,0 0,0 18M63,45a12,12 0,0 1,0 18M38,38a21,21 0,0 0,0 32M70,38a21,21 0,0 1,0 32"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+</vector>
