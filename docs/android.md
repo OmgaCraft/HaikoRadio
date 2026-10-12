@@ -33,8 +33,8 @@ Méthodes (synchrones) :
 | `HaikoNative.isNative()` | toujours `true` : sert à détecter l'application |
 | `HaikoNative.platform()` | `"android"` |
 | `HaikoNative.hasVolumeControl()` | `true` : la page peut afficher un curseur de volume |
-| `HaikoNative.getVolume()` | volume média du téléphone, entier de 0 à 100 |
-| `HaikoNative.setVolume(n)` | règle le volume média du téléphone ; `n` = **nombre entier** de 0 à 100 |
+| `HaikoNative.getVolume()` | volume **de l'application** (indépendant de celui du téléphone), entier de 0 à 100 |
+| `HaikoNative.setVolume(n)` | règle le volume de l'application ; `n` = **nombre entier** de 0 à 100 |
 | `HaikoNative.play(mode)` | lance la radio ; `mode` = `"aac"` (standard) ou `"hls"` (économique) |
 | `HaikoNative.stop()` | arrête tout (la notification disparaît) |
 | `HaikoNative.setMode(mode)` | change de qualité ; repart tout de suite si la radio joue |
@@ -62,10 +62,12 @@ Second événement, pour le curseur de volume :
 window.addEventListener('haiko-native-volume', function (e) { /* e.detail.volume : 0 à 100 */ });
 ```
 
-Il est émis au chargement, au retour au premier plan et à **chaque** changement du volume du téléphone (touches physiques, réglage
-rapide, autre application, ou `setVolume`). Le volume est celui du téléphone, pas un réglage de la page : ne pas le mémoriser dans
-`localStorage`, ne pas toucher à `audio.volume`, et mettre simplement le curseur à la valeur reçue **sans rappeler `setVolume`**
-(sinon boucle). Les valeurs sont arrondies aux crans du téléphone (demander 75 peut donner 73).
+Il est émis au chargement, au retour au premier plan et après chaque `setVolume`. Le curseur règle **le volume de l'application,
+séparé du volume du téléphone** : les touches de volume du téléphone ne le font pas bouger, et le curseur ne change pas le volume du
+téléphone (le son final = volume de l'application × volume du téléphone). Il est mémorisé côté Android (valeur par défaut : 100) : ne pas
+le mémoriser dans `localStorage`, ne pas toucher à `audio.volume`, et mettre simplement le curseur à la valeur reçue **sans rappeler
+`setVolume`** (sinon boucle). Le curseur suit une courbe douce (le gain appliqué est le carré de la valeur) pour que le milieu du
+curseur sonne réellement plus bas que le maximum.
 
 **Règle importante** : l'état affiché par la page doit toujours suivre cet état natif. Une pause peut venir de la notification ou
 du casque, pas seulement du bouton de la page.

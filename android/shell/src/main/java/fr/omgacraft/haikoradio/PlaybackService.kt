@@ -2,6 +2,7 @@ package fr.omgacraft.haikoradio
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
@@ -21,11 +22,12 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
     private lateinit var engine: RadioEngine
+    private lateinit var exo: ExoPlayer
 
     override fun onCreate() {
         super.onCreate()
 
-        val exo = ExoPlayer.Builder(this)
+        exo = ExoPlayer.Builder(this)
             // Musique : le lecteur se met en pause si un appel arrive, et reprend la main ensuite.
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -37,6 +39,8 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true) // casque débranché -> pause
             .setWakeMode(C.WAKE_MODE_NETWORK) // garde le processeur et le Wi-Fi actifs écran éteint
             .build()
+
+        applyAppVolume(AppVolume.get(this)) // le volume de l'application, retrouvé à chaque démarrage du service
 
         // Le moteur publie son état dans la session, et l'écran le lit.
         engine = RadioEngine(exo) { extras -> session?.setSessionExtras(extras) }
@@ -53,6 +57,13 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+
+    /** Règle le volume du lecteur (indépendant du volume du téléphone, voir AppVolume). */
+    private fun applyAppVolume(percent: Int) {
+        val gain = AppVolume.gain(percent)
+        exo.volume = gain
+        Log.i("HaikoVolume", "volume de l'application = $percent % (gain $gain)")
+    }
 
     /** Application fermée depuis la liste des applications récentes : on continue si la radio joue, sinon on s'éteint. */
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -83,6 +94,7 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand(CMD_START, Bundle.EMPTY))
                 .add(SessionCommand(CMD_STOP, Bundle.EMPTY))
                 .add(SessionCommand(CMD_SET_MODE, Bundle.EMPTY))
+                .add(SessionCommand(CMD_SET_VOLUME, Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
@@ -99,6 +111,7 @@ class PlaybackService : MediaSessionService() {
                 CMD_START -> engine.start(RadioMode.from(args.getString(ARG_MODE)))
                 CMD_STOP -> engine.stop()
                 CMD_SET_MODE -> engine.setMode(RadioMode.from(args.getString(ARG_MODE)))
+                CMD_SET_VOLUME -> applyAppVolume(args.getInt(ARG_PERCENT, AppVolume.DEFAULT_PERCENT))
                 else -> return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -109,6 +122,8 @@ class PlaybackService : MediaSessionService() {
         const val CMD_START = "haiko.start"
         const val CMD_STOP = "haiko.stop"
         const val CMD_SET_MODE = "haiko.setMode"
+        const val CMD_SET_VOLUME = "haiko.setVolume"
         const val ARG_MODE = "mode"
+        const val ARG_PERCENT = "percent"
     }
 }

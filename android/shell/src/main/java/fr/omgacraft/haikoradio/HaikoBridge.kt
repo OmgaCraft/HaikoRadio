@@ -18,7 +18,7 @@ class HaikoBridge(private val host: Host) {
         fun setMode(mode: RadioMode)
         fun stateJson(): String
 
-        /** Volume média du téléphone, de 0 à 100. */
+        /** Volume de l'application (le curseur de la page), de 0 à 100, indépendant du volume du téléphone. */
         fun volume(): Int
         fun setVolume(percent: Int)
 
@@ -33,15 +33,15 @@ class HaikoBridge(private val host: Host) {
     @JavascriptInterface
     fun platform(): String = "android"
 
-    /** Vrai : la page peut afficher un curseur de volume, qui règle le volume média du téléphone (voir getVolume / setVolume). */
+    /** Vrai : la page peut afficher un curseur de volume. Il règle le volume de l'application, séparé de celui du téléphone (voir getVolume / setVolume). */
     @JavascriptInterface
     fun hasVolumeControl(): Boolean = true
 
-    /** Volume média actuel du téléphone, de 0 à 100. Suit aussi les touches de volume : voir l'événement `haiko-native-volume`. */
+    /** Volume actuel de l'application, de 0 à 100 (mémorisé). Les touches de volume du téléphone ne le modifient pas. */
     @JavascriptInterface
     fun getVolume(): Int = host.volume()
 
-    /** Règle le volume média du téléphone (0 à 100). */
+    /** Règle le volume de l'application (0 à 100) ; il est mémorisé et n'agit pas sur le volume du téléphone. */
     @JavascriptInterface
     fun setVolume(percent: Int) = host.setVolume(percent)
 
@@ -89,7 +89,7 @@ class HaikoBridge(private val host: Host) {
         /** Nom de l'événement reçu par la page à chaque changement d'état : `window.addEventListener('haiko-native-state', e => e.detail)`. */
         const val EVENT_NAME = "haiko-native-state"
 
-        /** Reçu par la page quand le volume du téléphone change (touches, curseur, autre application) : `e.detail.volume` (0 à 100). */
+        /** Reçu par la page au chargement, au retour au premier plan et à chaque réglage du volume de l'application : `e.detail.volume` (0 à 100). */
         const val VOLUME_EVENT_NAME = "haiko-native-volume"
 
         fun volumeScript(percent: Int): String =

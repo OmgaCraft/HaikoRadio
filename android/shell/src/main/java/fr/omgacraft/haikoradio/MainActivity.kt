@@ -1,14 +1,10 @@
 package fr.omgacraft.haikoradio
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -37,7 +33,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.math.roundToInt
 
 /**
  * Écran unique : affiche l'interface commune (dossier app/ du dépôt, copié dans l'application)
@@ -54,15 +49,7 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* sans la permission, la radio joue quand même, juste sans notification */ }
 
-    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private lateinit var updateUi: UpdateUi
-
-    /** Prévient la page quand le volume média change (touches du téléphone, réglage rapide, autre application). */
-    private val volumeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.getIntExtra(EXTRA_VOLUME_STREAM_TYPE, -1) == AudioManager.STREAM_MUSIC) emitVolume()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -123,20 +110,6 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         RadioConfig.releaseUrlOverride = url
         updateUi.check(manual = false, ignoreSnooze = true)
         return true
-    }
-
-    override fun onStart() {
-        super.onStart()
-        ContextCompat.registerReceiver(this, volumeReceiver, IntentFilter(VOLUME_CHANGED_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
-    }
-
-    override fun onStop() {
-        try {
-            unregisterReceiver(volumeReceiver)
-        } catch (e: IllegalArgumentException) {
-            // déjà retiré
-        }
-        super.onStop()
     }
 
     override fun onResume() {
@@ -338,19 +311,18 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         }.toString()
     }
 
-    override fun volume(): Int {
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        if (max <= 0) return 0
-        return (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) * 100f / max).roundToInt()
-    }
+    /** Volume de l'application (0 à 100), mémorisé. Il est indépendant du volume du téléphone : les touches du téléphone n'y touchent pas. */
+    override fun volume(): Int = AppVolume.get(this)
 
     override fun setVolume(percent: Int) {
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val index = (percent.coerceIn(0, 100) * max / 100f).roundToInt()
-        try {
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, index, 0) // 0 : pas de fenêtre de volume du système, le curseur de la page suffit
-        } catch (e: SecurityException) {
-            Log.w(TAG, "Réglage du volume refusé : ${e.message}") // ex. mode « Ne pas déranger » strict
+        val clamped = percent.coerceIn(0, 100)
+        AppVolume.set(this, clamped) // mémorisé tout de suite : le service le relira s'il redémarre
+        runOnUiThread {
+            withController { controller ->
+                val args = Bundle().apply { putInt(PlaybackService.ARG_PERCENT, clamped) }
+                controller.sendCustomCommand(SessionCommand(PlaybackService.CMD_SET_VOLUME, Bundle.EMPTY), args)
+            }
+            emitVolume()
         }
     }
 
@@ -374,10 +346,6 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         private const val APP_HOST = "appassets.androidplatform.net"
         private const val RADIO_HOST = "radio.omgacraft.fr"
         private const val BACKGROUND = 0xFF0A0C11.toInt()
-
-        // Diffusion système envoyée à chaque changement de volume (non documentée officiellement, mais utilisée depuis toujours).
-        private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
-        private const val EXTRA_VOLUME_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE"
 
         /** Versions debug : adresse de la page de test à ouvrir (ex. `bridge-test.html?auto=1`). */
         const val EXTRA_DEV_PATH = "dev_path"

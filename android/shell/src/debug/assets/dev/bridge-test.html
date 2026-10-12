@@ -95,6 +95,7 @@
     log('RESULT volume apres setVolume(40): get=' + N.getVolume() + ' evenements=' + JSON.stringify(volEvents));
     N.setVolume(75); await sleep(800);
     log('RESULT volume apres setVolume(75): get=' + N.getVolume() + ' evenements=' + JSON.stringify(volEvents));
+    N.setVolume(100); await sleep(500);
 
     N.play('aac');
     s = await waitFor('standard joue', function (st) { return st.status === 'playing'; });
