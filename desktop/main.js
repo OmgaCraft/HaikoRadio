@@ -11,6 +11,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, protocol, net, ipcMain, she
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
+const updater = require('./updater');
 
 const SITE = 'https://radio.omgacraft.fr';
 const APP_SCHEME = 'app';
@@ -185,6 +186,7 @@ function buildTrayMenu() {
             }
         },
         { type: 'separator' },
+        ...updateMenuItems(),
         {
             label: 'Lancer avec Windows',
             type: 'checkbox',
@@ -194,6 +196,40 @@ function buildTrayMenu() {
         { type: 'separator' },
         { label: 'Quitter', click: () => { quitting = true; app.quit(); } }
     ]);
+}
+
+// Entrées du menu de l'icône liées à la mise à jour (rien en version de développement).
+function updateMenuItems() {
+    const u = updater.getState();
+    if (u.status === 'disabled') { return []; }
+    let items;
+    if (u.status === 'ready') {
+        items = [{ label: `Installer la mise à jour ${u.version} et redémarrer`, click: () => updater.install(() => { quitting = true; }) }];
+    } else if (u.status === 'downloading') {
+        items = [{ label: `Mise à jour ${u.version} : téléchargement ${u.percent} %`, enabled: false }];
+    } else {
+        items = [{ label: 'Rechercher les mises à jour', enabled: u.status !== 'checking', click: () => updater.check(true) }];
+    }
+    return [...items, { type: 'separator' }];
+}
+
+// Une vérification demandée depuis l'icône (fenêtre souvent masquée) : on répond par une bulle près de l'horloge.
+function onUpdateState(u) {
+    if (win && !win.isDestroyed()) { win.webContents.send('update:state', u); }
+    updateTray();
+    if (!tray || process.platform !== 'win32') { return; }
+    const hidden = !win || !win.isVisible();
+    if (u.status === 'none' && u.manual && hidden) {
+        tray.displayBalloon({ title: 'HaikoRadio', content: 'Vous avez déjà la dernière version.', iconType: 'info' });
+    } else if (u.status === 'error' && u.manual && hidden) {
+        tray.displayBalloon({ title: 'HaikoRadio', content: u.message, iconType: 'warning' });
+    } else if (u.status === 'ready' && hidden) {
+        tray.displayBalloon({
+            title: `HaikoRadio ${u.version} est prête`,
+            content: 'Clique sur l\'icône près de l\'horloge pour installer la mise à jour, ou elle s\'installera à la fermeture.',
+            iconType: 'info'
+        });
+    }
 }
 
 function updateTray() {
@@ -255,6 +291,7 @@ app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
     createWindow();
     createTray();
+    updater.init({ fromApp, onChange: onUpdateState, beforeQuit: () => { quitting = true; } });
 });
 
 // Même fenêtre fermée, l'application reste active tant qu'on n'a pas choisi "Quitter" (ou que la radio ne joue pas).

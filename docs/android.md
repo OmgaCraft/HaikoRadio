@@ -32,7 +32,9 @@ Méthodes (synchrones) :
 |---|---|
 | `HaikoNative.isNative()` | toujours `true` : sert à détecter l'application |
 | `HaikoNative.platform()` | `"android"` |
-| `HaikoNative.hasVolumeControl()` | `false` : le volume se règle avec les touches du téléphone |
+| `HaikoNative.hasVolumeControl()` | `true` : la page peut afficher un curseur de volume |
+| `HaikoNative.getVolume()` | volume média du téléphone, entier de 0 à 100 |
+| `HaikoNative.setVolume(n)` | règle le volume média du téléphone ; `n` = **nombre entier** de 0 à 100 |
 | `HaikoNative.play(mode)` | lance la radio ; `mode` = `"aac"` (standard) ou `"hls"` (économique) |
 | `HaikoNative.stop()` | arrête tout (la notification disparaît) |
 | `HaikoNative.setMode(mode)` | change de qualité ; repart tout de suite si la radio joue |
@@ -54,11 +56,50 @@ window.addEventListener('haiko-native-state', function (e) { /* e.detail */ });
 | `message` | texte d'explication (repli, erreur), sinon vide |
 | `playing` / `active` | `playing` : le son sort ; `active` : connexion, mise en mémoire ou lecture |
 
+Second événement, pour le curseur de volume :
+
+```js
+window.addEventListener('haiko-native-volume', function (e) { /* e.detail.volume : 0 à 100 */ });
+```
+
+Il est émis au chargement, au retour au premier plan et à **chaque** changement du volume du téléphone (touches physiques, réglage
+rapide, autre application, ou `setVolume`). Le volume est celui du téléphone, pas un réglage de la page : ne pas le mémoriser dans
+`localStorage`, ne pas toucher à `audio.volume`, et mettre simplement le curseur à la valeur reçue **sans rappeler `setVolume`**
+(sinon boucle). Les valeurs sont arrondies aux crans du téléphone (demander 75 peut donner 73).
+
 **Règle importante** : l'état affiché par la page doit toujours suivre cet état natif. Une pause peut venir de la notification ou
 du casque, pas seulement du bouton de la page.
 
 **Attention aux appels** : Android refuse un appel de méthode dont le nombre d'arguments ne correspond pas. Appeler
 `HaikoNative.play(mode)`, `HaikoNative.stop()` sans argument. (`stop(undefined)` est toléré, mais mieux vaut ne rien passer.)
+
+## Mise à jour automatique
+
+L'application se met à jour depuis les **Releases GitHub** du dépôt, sans passer par un magasin d'applications.
+
+1. **Vérification** : au lancement, au plus toutes les 6 h, l'application lit la dernière Release (`/releases/latest`).
+   Elle compare le tag (`v0.1.1`) à sa propre version. Les brouillons et les pré-versions sont ignorés.
+2. **Proposition** : si la version est plus récente, une boîte de dialogue propose « Mettre à jour » ou « Plus tard »
+   (« Plus tard » repousse de 24 h la même version).
+3. **Téléchargement** du premier fichier `.apk` de la Release (uniquement s'il est hébergé par ce dépôt), avec une barre de progression.
+4. **Contrôles avant installation** (tout refus est expliqué à l'utilisateur et rien n'est installé) : taille et empreinte SHA-256
+   annoncée par GitHub, même nom d'application, version plus récente, et **signature identique à celle de l'application installée**.
+5. **Installation** par le système Android, qui demande une confirmation (une installation 100 % silencieuse est impossible hors Play Store).
+   La première fois, Android demande aussi d'autoriser HaikoRadio à « installer des applications inconnues » : l'application ouvre
+   les réglages et reprend toute seule au retour.
+
+À savoir :
+- La version **0.1.0** n'a pas cette fonction : il faut installer une fois la 0.1.1 à la main ; les suivantes seront proposées automatiquement.
+- Pour que la mise à jour soit proposée : tag `vX.Y.Z` (supérieur à la version installée) et un fichier `.apk` dans la Release,
+  **signé avec la même clé** (voir « Signature et publication »). Ne pas passer la Release en brouillon ni en pré-version.
+- Le pont expose `HaikoNative.appVersion()` (version installée) et `HaikoNative.checkForUpdate()` (vérifie tout de suite et répond même
+  s'il n'y a rien de nouveau), utiles pour un bouton « Rechercher une mise à jour » dans l'interface.
+- Certains téléphones (Google Play Protect) affichent leur propre vérification lors d'une installation hors Play Store : c'est normal.
+
+**Tester sans publier** (versions debug) : lancer l'application avec une adresse de faux serveur de versions,
+`adb shell am start -n fr.omgacraft.haikoradio/.MainActivity --es release_url http://10.0.2.2:8123/latest.json`,
+où `latest.json` imite la réponse de GitHub (`tag_name`, `assets[].name / size / browser_download_url / digest`).
+Pour fabriquer la « nouvelle » version : `./gradlew assembleDebug -PhaikoVersionName=9.9.9 -PhaikoVersionCode=2`.
 
 ## Réseau
 
@@ -91,8 +132,9 @@ Prérequis déjà installés : Android Studio (pour le SDK et le JDK). Ouvrir un
   **jamais dans le dépôt**. **À sauvegarder** (clé USB, gestionnaire de mots de passe…) : sans elle, impossible de publier une mise à
   jour qui s'installe par-dessus l'ancienne version ; il faudrait désinstaller l'application.
 - Pour publier une nouvelle version : augmenter `appVersionName` **et** `appVersionCode` dans `android/shell/build.gradle.kts`,
-  lancer `./gradlew exportApk`, puis joindre `android/dist/HaikoRadio-<version>.apk` à une *Release* GitHub du dépôt
-  (le site lit la dernière Release pour proposer le téléchargement).
+  lancer `./gradlew exportApk`, puis joindre `android/dist/HaikoRadio-<version>.apk` à une *Release* GitHub du dépôt dont le tag est
+  `v<version>` (le site lit la dernière Release pour proposer le téléchargement, et l'application s'en sert pour se mettre à jour).
+  La Release doit aussi contenir les fichiers Windows (`HaikoRadio-Setup-<version>.exe`, `.exe.blockmap`, `latest.yml`).
 
 ## Dépendances
 

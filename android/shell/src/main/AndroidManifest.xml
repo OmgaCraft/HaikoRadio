@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Android 13+ : nécessaire pour afficher la notification de lecture. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Mise à jour automatique : permet à l'application de lancer l'installation de sa propre nouvelle version. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="false"
@@ -29,6 +31,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Reçoit le résultat de l'installation d'une mise à jour. -->
+        <receiver
+            android:name=".UpdateInstallReceiver"
+            android:exported="false" />
 
         <service
             android:name=".PlaybackService"

@@ -7,8 +7,9 @@ plugins {
 }
 
 // Version de l'application : à augmenter à chaque publication (versionCode doit toujours grandir).
-val appVersionName = "0.1.0"
-val appVersionCode = 1
+// (Les propriétés haikoVersionName / haikoVersionCode, passées en -P à Gradle, servent uniquement aux tests de mise à jour.)
+val appVersionName = (findProperty("haikoVersionName") as String?) ?: "0.1.1"
+val appVersionCode = (findProperty("haikoVersionCode") as String?)?.toInt() ?: 2
 
 // La clé de signature (qui authentifie les mises à jour) n'est JAMAIS dans le dépôt :
 // elle vit dans C:\Users\<toi>\.haikoradio\ (haikoradio-release.jks + keystore.properties). À sauvegarder précieusement.

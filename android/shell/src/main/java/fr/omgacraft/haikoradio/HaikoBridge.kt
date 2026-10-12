@@ -17,6 +17,13 @@ class HaikoBridge(private val host: Host) {
         fun stop()
         fun setMode(mode: RadioMode)
         fun stateJson(): String
+
+        /** Volume média du téléphone, de 0 à 100. */
+        fun volume(): Int
+        fun setVolume(percent: Int)
+
+        /** Cherche une nouvelle version à la demande de l'utilisateur (répond même s'il n'y en a pas). */
+        fun checkForUpdate()
     }
 
     /** Toujours vrai : sert à détecter l'application. */
@@ -26,9 +33,28 @@ class HaikoBridge(private val host: Host) {
     @JavascriptInterface
     fun platform(): String = "android"
 
-    /** Le volume se règle avec les touches du téléphone : la page n'a pas besoin de son propre curseur. */
+    /** Vrai : la page peut afficher un curseur de volume, qui règle le volume média du téléphone (voir getVolume / setVolume). */
     @JavascriptInterface
-    fun hasVolumeControl(): Boolean = false
+    fun hasVolumeControl(): Boolean = true
+
+    /** Volume média actuel du téléphone, de 0 à 100. Suit aussi les touches de volume : voir l'événement `haiko-native-volume`. */
+    @JavascriptInterface
+    fun getVolume(): Int = host.volume()
+
+    /** Règle le volume média du téléphone (0 à 100). */
+    @JavascriptInterface
+    fun setVolume(percent: Int) = host.setVolume(percent)
+
+    /** Version installée de l'application, par exemple "0.1.1" (utile pour un écran « À propos »). */
+    @JavascriptInterface
+    fun appVersion(): String = BuildConfig.VERSION_NAME
+
+    /**
+     * Cherche une mise à jour maintenant. L'application la propose elle-même (boîte de dialogue Android) ;
+     * la vérification automatique, elle, a lieu au lancement, au plus toutes les 6 h.
+     */
+    @JavascriptInterface
+    fun checkForUpdate() = host.checkForUpdate()
 
     /** mode : "aac" (qualité standard) ou "hls" (mode économique). */
     @JavascriptInterface
@@ -62,6 +88,12 @@ class HaikoBridge(private val host: Host) {
     companion object {
         /** Nom de l'événement reçu par la page à chaque changement d'état : `window.addEventListener('haiko-native-state', e => e.detail)`. */
         const val EVENT_NAME = "haiko-native-state"
+
+        /** Reçu par la page quand le volume du téléphone change (touches, curseur, autre application) : `e.detail.volume` (0 à 100). */
+        const val VOLUME_EVENT_NAME = "haiko-native-volume"
+
+        fun volumeScript(percent: Int): String =
+            "window.dispatchEvent(new CustomEvent('$VOLUME_EVENT_NAME',{detail:{volume:$percent}}));"
 
         fun eventScript(stateJson: String): String {
             // JSONObject(...).toString() garantit un JSON valide, donc un littéral JavaScript valide.

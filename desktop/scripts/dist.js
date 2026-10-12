@@ -14,7 +14,7 @@ const path = require('path');
 const out = process.env.HAIKO_DIST_DIR || path.join(os.tmpdir(), 'haikoradio-dist');
 const result = spawnSync(
     'npx',
-    ['electron-builder', '--win', '--x64', `--config.directories.output=${out}`],
+    ['electron-builder', '--win', '--x64', `--config.directories.output=${out}`, ...process.argv.slice(2)],
     { stdio: 'inherit', shell: true, cwd: path.join(__dirname, '..') }
 );
 

@@ -32,6 +32,12 @@
             </nav>
         </header>
 
+        <!-- Mise à jour de l'application (Windows uniquement : affiché seulement quand il y a quelque chose à dire) -->
+        <div class="update-banner" id="update-banner" hidden role="status" aria-live="polite">
+            <span id="update-text"></span>
+            <button class="btn btn-small btn-primary" id="update-install" type="button" hidden>Redémarrer et installer</button>
+        </div>
+
         <!-- ================= Radio ================= -->
         <main class="view" id="view-radio" data-view="radio">
             <div class="radio-layout">
@@ -133,6 +139,7 @@
             <a href="https://radio.omgacraft.fr/mentions-legales" target="_blank" rel="noopener">Mentions légales</a>
             <span class="dot">·</span>
             <span id="app-version"></span>
+            <button class="link-button" id="update-check" type="button" hidden>Rechercher une mise à jour</button>
         </footer>
     </div>
 
@@ -141,6 +148,7 @@
     <script src="js/nowplaying.js"></script>
     <script src="js/player.js"></script>
     <script src="js/planning.js"></script>
+    <script src="js/updates.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

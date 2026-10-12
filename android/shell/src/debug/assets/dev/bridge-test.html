@@ -26,6 +26,8 @@
   <button id="b-break">Casser le flux direct</button>
   <button id="b-fix">Réparer le flux direct</button>
   <button id="b-api">Lire l'API du site</button>
+  <button id="b-v30">Volume 30 %</button>
+  <button id="b-v80">Volume 80 %</button>
 </div>
 <div id="state">état : —</div>
 <div id="log"></div>
@@ -66,6 +68,14 @@
   document.getElementById('b-break').onclick = function () { N.debugSetAacUrl('https://haikoradio.ice.infomaniak.ch/introuvable.aac'); log('flux direct cassé (test)'); };
   document.getElementById('b-fix').onclick = function () { N.debugSetAacUrl(''); log('flux direct rétabli'); };
   document.getElementById('b-api').onclick = function () { readApi(); };
+  document.getElementById('b-v30').onclick = function () { N.setVolume(30); };
+  document.getElementById('b-v80').onclick = function () { N.setVolume(80); };
+
+  var volEvents = [];
+  window.addEventListener('haiko-native-volume', function (e) {
+    volEvents.push(e.detail.volume);
+    log('VOLUME evenement ' + e.detail.volume + '%');
+  });
 
   function readApi() {
     return fetch('https://radio.omgacraft.fr/api/now-playing', { cache: 'no-store' })
@@ -79,6 +89,12 @@
     var s;
     log('RESULT scenario=debut');
     await waitFor('etat initial', function (st) { return !!st; }, 8000);
+
+    log('RESULT volume-controle=' + N.hasVolumeControl() + ' volume-initial=' + N.getVolume());
+    N.setVolume(40); await sleep(800);
+    log('RESULT volume apres setVolume(40): get=' + N.getVolume() + ' evenements=' + JSON.stringify(volEvents));
+    N.setVolume(75); await sleep(800);
+    log('RESULT volume apres setVolume(75): get=' + N.getVolume() + ' evenements=' + JSON.stringify(volEvents));
 
     N.play('aac');
     s = await waitFor('standard joue', function (st) { return st.status === 'playing'; });

@@ -15,6 +15,7 @@ L'interface est reprise du site `radio.omgacraft.fr` (même thème, mêmes compo
 | `js/nowplaying.js` | Morceau en cours, historique, pochettes |
 | `js/player.js` | Lecteur : qualité standard / économique, secours automatique, commandes système |
 | `js/planning.js` | Planning : calcul « en ce moment / ensuite », grille, listes, légende |
+| `js/updates.js` | Bandeau « mise à jour prête » et bouton de recherche (Windows uniquement) |
 | `js/app.js` | Navigation, titre de la fenêtre, lien avec l'application Windows |
 | `css/theme.css`, `css/site.css` | Thème et composants copiés du site |
 | `vendor/hls.min.js` | Lecteur HLS (hls.js, licence Apache 2.0) |
@@ -23,7 +24,9 @@ L'interface est reprise du site `radio.omgacraft.fr` (même thème, mêmes compo
 ## Application Windows (`desktop/`)
 
 - `main.js` : fenêtre, icône de notification, protocole `app://` qui sert l'interface depuis les fichiers locaux, accès réseau limité à `radio.omgacraft.fr`.
-- `preload.js` : les quatre seules fonctions données à l'interface (`getJson`, `setState`, `onTogglePlay`, `getVersion`).
+- `preload.js` : les seules fonctions données à l'interface (`getJson`, `setState`, `onTogglePlay`, `getVersion`, et pour les mises à jour `getUpdateState`, `onUpdateState`, `checkForUpdates`, `installUpdate`).
+- `updater.js` : mise à jour automatique (electron-updater, Releases GitHub). États : `disabled`, `idle`, `checking`, `downloading`, `ready`, `none`, `error`.
+- `scripts/dist.js` : fabrique l'installateur (hors OneDrive). `scripts/publish.js` : publie la Release (simulation par défaut).
 - `test/smoke.js` : test automatique.
 
 ## Ce qui est copié du site (à garder en phase)

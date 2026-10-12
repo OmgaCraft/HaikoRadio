@@ -70,6 +70,26 @@ app.whenReady().then(async () => {
     check('version affichée', /v\d/.test(ui.version), ui.version);
     await shot('01-radio');
 
+    // 1b) Curseur de volume : sous Windows, c'est le volume de la page (mémorisé), pas celui d'un pont natif
+    const vol = await js(`(() => {
+        const s = document.getElementById('volume');
+        s.value = '33';
+        s.dispatchEvent(new Event('input', { bubbles: true }));
+        const r = { audio: document.getElementById('audio').volume, stored: localStorage.getItem('radio-volume') };
+        s.value = '80';
+        s.dispatchEvent(new Event('input', { bubbles: true }));
+        return r;
+    })()`);
+    check('curseur de volume : règle le son de la page et le mémorise', Math.abs(vol.audio - 0.33) < 0.001 && vol.stored === '33', JSON.stringify(vol));
+
+    // 1c) Mise à jour : sans application installée (développement), rien ne doit s'afficher ni se déclencher
+    const upd = await js(`(async () => ({
+        state: (await haikoNative.getUpdateState()).status,
+        bannerHidden: document.getElementById('update-banner').hidden,
+        checkHidden: document.getElementById('update-check').hidden
+    }))()`);
+    check('mise à jour : désactivée en développement, interface masquée', upd.state === 'disabled' && upd.bannerHidden && upd.checkHidden, JSON.stringify(upd));
+
     // 2) Lecture réelle : qualité standard, puis mode économique
     const play = async (label, modeSelector) => {
         if (modeSelector) { await js(`document.querySelector('${modeSelector}').click()`); }

@@ -2,7 +2,7 @@
 
 /*
  * Pont entre l'interface et le programme principal.
- * L'interface ne reçoit que ces quatre fonctions, pas d'accès au système.
+ * L'interface ne reçoit que ces fonctions, pas d'accès au système.
  */
 
 const { contextBridge, ipcRenderer } = require('electron');
@@ -23,5 +23,11 @@ contextBridge.exposeInMainWorld('haikoNative', {
     // Lecture / pause demandée depuis le menu de l'icône.
     onTogglePlay: (callback) => ipcRenderer.on('toggle-play', () => callback()),
 
-    getVersion: () => ipcRenderer.invoke('app:version')
+    getVersion: () => ipcRenderer.invoke('app:version'),
+
+    // Mises à jour : état courant, abonnement aux changements, recherche manuelle, installation.
+    getUpdateState: () => ipcRenderer.invoke('update:get-state'),
+    onUpdateState: (callback) => ipcRenderer.on('update:state', (event, state) => callback(state)),
+    checkForUpdates: () => ipcRenderer.invoke('update:check'),
+    installUpdate: () => ipcRenderer.send('update:install')
 });

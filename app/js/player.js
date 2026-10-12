@@ -261,10 +261,14 @@
         });
     });
 
-    var savedVolume = parseInt(load('radio-volume') || '', 10);
-    if (!isNaN(savedVolume) && savedVolume >= 0 && savedVolume <= 100) { volume.value = String(savedVolume); }
-    audio.volume = volume.value / 100;
+    // Volume de la page (Windows). Sur Android, le curseur pilote le volume du téléphone : voir « Application Android ».
+    if (!NATIVE) {
+        var savedVolume = parseInt(load('radio-volume') || '', 10);
+        if (!isNaN(savedVolume) && savedVolume >= 0 && savedVolume <= 100) { volume.value = String(savedVolume); }
+        audio.volume = volume.value / 100;
+    }
     volume.addEventListener('input', function () {
+        if (NATIVE) { nativeVolumeInput(); return; }
         audio.volume = volume.value / 100;
         store('radio-volume', volume.value);
     });
@@ -360,14 +364,60 @@
         notify();
     }
 
+    // Volume du téléphone. Le curseur envoie un entier 0..100 ; le téléphone renvoie la valeur réellement
+    // appliquée (arrondie à ses crans), qu'on affiche sans la renvoyer (sinon boucle).
+    var volumeAvailable = false;
+    var volumeDragging = false;
+    var volumePending = null;
+    var volumeTimer = 0;
+
+    function nativeVolumeInput() {
+        if (!volumeAvailable) { return; }
+        volumePending = Math.round(Number(volume.value));
+        if (volumeTimer) { return; }
+        // Au plus une commande toutes les 40 ms (la dernière valeur) : glisser le doigt ne doit pas inonder le pont.
+        volumeTimer = setTimeout(function () {
+            volumeTimer = 0;
+            if (volumePending !== null && !isNaN(volumePending)) { nativeCall('setVolume', volumePending); }
+            volumePending = null;
+        }, 40);
+    }
+
+    function setVolumeFromNative(value) {
+        var v = Math.round(Number(value));
+        if (isNaN(v) || v < 0 || v > 100) { return; }
+        if (volumeDragging) { return; } // on ne dispute pas le curseur au doigt de l'utilisateur
+        volume.value = String(v);
+    }
+
+    function initNativeVolume() {
+        var bridge = window.HaikoNative;
+        var box = volume.closest('.volume');
+        try { volumeAvailable = !!(bridge.hasVolumeControl && bridge.hasVolumeControl()); } catch (e) {}
+
+        // Pas de réglage possible depuis la page : on masque le curseur (le volume se règle avec les touches du téléphone).
+        if (!volumeAvailable) {
+            if (box) { box.style.display = 'none'; }
+            return;
+        }
+
+        function endDrag() {
+            if (!volumeDragging) { return; }
+            volumeDragging = false;
+            // Au relâchement, on affiche la valeur réellement appliquée (le téléphone l'arrondit à ses crans).
+            setTimeout(function () { try { setVolumeFromNative(bridge.getVolume()); } catch (e) {} }, 200);
+        }
+        volume.addEventListener('pointerdown', function () { volumeDragging = true; });
+        window.addEventListener('pointerup', endDrag);
+        window.addEventListener('pointercancel', endDrag);
+        window.addEventListener('haiko-native-volume', function (event) {
+            setVolumeFromNative(event.detail && event.detail.volume);
+        });
+        try { setVolumeFromNative(bridge.getVolume()); } catch (e) {} // l'événement a pu partir avant le chargement du script
+    }
+
     function initNative() {
-        // Le volume se règle avec les touches du téléphone : pas de curseur dans la page.
-        try {
-            if (window.HaikoNative.hasVolumeControl && !window.HaikoNative.hasVolumeControl()) {
-                var volumeBox = volume.closest('.volume');
-                if (volumeBox) { volumeBox.style.display = 'none'; }
-            }
-        } catch (e) {}
+        initNativeVolume();
 
         window.addEventListener('haiko-native-state', function (event) { applyNativeState(event.detail); });
 

@@ -10,6 +10,7 @@ Elles reprennent le site [radio.omgacraft.fr](https://radio.omgacraft.fr) : lect
 - **Planning** de la semaine, émission en cours et suivante (heures de Paris).
 - **Zone de notification** : fermer la fenêtre pendant l'écoute laisse la radio jouer ; clic droit sur l'icône près de l'horloge pour lecture/pause, ouvrir, lancer avec Windows, quitter.
 - **Touches multimédia** du clavier (lecture/pause), thème clair/sombre, taille de fenêtre mémorisée.
+- **Mise à jour automatique** : l'application cherche toute seule une nouvelle version sur GitHub, la télécharge en arrière-plan (la radio continue de jouer) et propose « Redémarrer et installer ». Voir « Publier une nouvelle version ».
 
 ## Organisation du dépôt
 
@@ -42,6 +43,22 @@ npm run dist
 Le fichier `HaikoRadio-Setup-<version>.exe` est écrit **hors du dossier du projet** (par défaut dans le dossier temporaire de Windows, son emplacement est affiché à la fin) : quand le projet est dans OneDrive, la synchronisation bloque la fabrication. Pour choisir le dossier : `HAIKO_DIST_DIR=C:\chemin npm run dist`.
 Ce fichier est l'installateur à publier dans une *Release* GitHub (c'est de là que le site propose le téléchargement).
 L'installateur n'est pas signé numériquement : Windows peut afficher un avertissement « SmartScreen » au premier lancement (« Informations complémentaires » puis « Exécuter quand même »).
+
+## Publier une nouvelle version (mise à jour automatique)
+
+Les applications déjà installées se mettent à jour toutes seules, à condition que la nouvelle version soit publiée **correctement** sur GitHub. Marche à suivre, dans l'ordre :
+
+1. Changer le numéro de version dans `desktop/package.json` (champ `"version"`, par ex. `0.1.2`). Il doit être **plus grand** que le précédent.
+2. Enregistrer (commit) et envoyer (push) le code sur GitHub.
+3. Fabriquer l'installateur : `cd desktop && npm run dist`
+4. Simuler la publication (ne publie rien, vérifie tout) : `npm run publish`
+5. Publier pour de bon : `npm run publish -- --yes`
+
+Le script envoie trois fichiers vers la Release `v<version>` qui doit **déjà exister** (elle est créée avec l'APK Android ; pour la créer ici : `--create-release`) : : l'installateur, son `.blockmap` et `latest.yml`. **Ces trois fichiers sont indispensables** : sans `latest.yml`, les applications installées ne voient pas la nouvelle version. Il refuse de publier si des modifications ne sont pas enregistrées, si le code n'est pas sur GitHub, ou si l'installateur est plus ancien que le dernier commit.
+L'APK Android est ajouté à la même Release (voir `docs/android.md`) : le site de la radio lit la dernière Release et y cherche un `.exe` et un `.apk`. Ne pas passer une Release en « brouillon » ni en « pré-version » : elle ne serait pas proposée.
+
+Comment ça marche côté application : 15 secondes après le démarrage puis toutes les 4 heures, elle lit `latest.yml` dans la dernière Release, télécharge l'installateur si la version est plus récente et **vérifie son empreinte (sha512)** : un fichier modifié ou corrompu est refusé et supprimé. Si tu ne fais rien, la mise à jour s'installe à la fermeture. Un bouton « Rechercher une mise à jour » (pied de page) et un menu de l'icône permettent de vérifier à la main.
+La version 0.1.0 (sans ce mécanisme) doit être mise à jour à la main une seule fois ; les suivantes sont automatiques. L'installateur n'étant pas signé, la vérification repose sur l'empreinte publiée dans `latest.yml` (le compte GitHub est donc la clé de la chaîne : le protéger).
 
 ## Vérifier que tout fonctionne (test automatique)
 

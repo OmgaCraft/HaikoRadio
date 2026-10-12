@@ -1,10 +1,14 @@
 package fr.omgacraft.haikoradio
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -33,6 +37,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.math.roundToInt
 
 /**
  * Écran unique : affiche l'interface commune (dossier app/ du dépôt, copié dans l'application)
@@ -48,6 +53,16 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* sans la permission, la radio joue quand même, juste sans notification */ }
+
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private lateinit var updateUi: UpdateUi
+
+    /** Prévient la page quand le volume média change (touches du téléphone, réglage rapide, autre application). */
+    private val volumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.getIntExtra(EXTRA_VOLUME_STREAM_TYPE, -1) == AudioManager.STREAM_MUSIC) emitVolume()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -88,6 +103,9 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
 
         connectToPlayer()
         webView.loadUrl(startUrl(intent))
+
+        updateUi = UpdateUi(this)
+        if (!debugUpdateCheck(intent)) updateUi.checkOnStart()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -95,12 +113,38 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         if (BuildConfig.DEBUG && intent.hasExtra(EXTRA_DEV_PATH)) {
             webView.loadUrl(startUrl(intent))
         }
+        debugUpdateCheck(intent)
+    }
+
+    /** Versions debug : `--es release_url http://10.0.2.2:8099/latest.json` teste la mise à jour avec un faux serveur de versions. */
+    private fun debugUpdateCheck(intent: Intent): Boolean {
+        val url = if (BuildConfig.DEBUG) intent.getStringExtra(EXTRA_RELEASE_URL) else null
+        if (url == null) return false
+        RadioConfig.releaseUrlOverride = url
+        updateUi.check(manual = false, ignoreSnooze = true)
+        return true
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ContextCompat.registerReceiver(this, volumeReceiver, IntentFilter(VOLUME_CHANGED_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    override fun onStop() {
+        try {
+            unregisterReceiver(volumeReceiver)
+        } catch (e: IllegalArgumentException) {
+            // déjà retiré
+        }
+        super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
         webView.onResume()
         emitState()
+        emitVolume()
+        updateUi.onResume()
     }
 
     override fun onPause() {
@@ -109,6 +153,7 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
     }
 
     override fun onDestroy() {
+        updateUi.release()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
         webView.removeJavascriptInterface("HaikoNative")
@@ -162,6 +207,7 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
 
             override fun onPageFinished(view: WebView, url: String?) {
                 emitState()
+                emitVolume()
             }
         }
     }
@@ -292,6 +338,32 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         }.toString()
     }
 
+    override fun volume(): Int {
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        if (max <= 0) return 0
+        return (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) * 100f / max).roundToInt()
+    }
+
+    override fun setVolume(percent: Int) {
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val index = (percent.coerceIn(0, 100) * max / 100f).roundToInt()
+        try {
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, index, 0) // 0 : pas de fenêtre de volume du système, le curseur de la page suffit
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Réglage du volume refusé : ${e.message}") // ex. mode « Ne pas déranger » strict
+        }
+    }
+
+    override fun checkForUpdate() {
+        runOnUiThread { updateUi.check(manual = true) }
+    }
+
+    private fun emitVolume() {
+        if (!::webView.isInitialized) return
+        val percent = volume()
+        runOnUiThread { webView.evaluateJavascript(HaikoBridge.volumeScript(percent), null) }
+    }
+
     private fun emitState() {
         if (!::webView.isInitialized) return
         runOnUiThread { webView.evaluateJavascript(HaikoBridge.eventScript(stateJson()), null) }
@@ -303,7 +375,14 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         private const val RADIO_HOST = "radio.omgacraft.fr"
         private const val BACKGROUND = 0xFF0A0C11.toInt()
 
+        // Diffusion système envoyée à chaque changement de volume (non documentée officiellement, mais utilisée depuis toujours).
+        private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
+        private const val EXTRA_VOLUME_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE"
+
         /** Versions debug : adresse de la page de test à ouvrir (ex. `bridge-test.html?auto=1`). */
         const val EXTRA_DEV_PATH = "dev_path"
+
+        /** Versions debug : adresse d'un faux serveur de versions, pour tester la mise à jour. */
+        const val EXTRA_RELEASE_URL = "release_url"
     }
 }

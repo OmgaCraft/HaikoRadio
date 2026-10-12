@@ -18,7 +18,18 @@ object RadioConfig {
 
     const val NOW_PLAYING_POLL_MS = 15_000L
 
+    /** Dépôt GitHub qui publie les versions : la dernière « Release » est celle que l'application propose d'installer. */
+    const val GITHUB_REPO = "OmgaCraft/HaikoRadio"
+    const val RELEASE_API_URL = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+
+    /** Les fichiers de mise à jour ne sont acceptés que s'ils viennent de ce dépôt. */
+    const val RELEASE_DOWNLOAD_PREFIX = "https://github.com/$GITHUB_REPO/releases/download/"
+
     /** Uniquement pour les tests (versions debug) : remplace l'adresse du flux direct, par exemple par une adresse cassée. */
     @Volatile
     var aacUrlOverride: String? = null
+
+    /** Uniquement pour les tests (versions debug) : remplace l'adresse qui annonce la dernière version. */
+    @Volatile
+    var releaseUrlOverride: String? = null
 }

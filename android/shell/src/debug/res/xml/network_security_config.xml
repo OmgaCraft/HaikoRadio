@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Versions debug uniquement : autorise le HTTP vers l'ordinateur de développement (10.0.2.2 depuis l'émulateur)
+     pour tester la mise à jour avec un faux serveur de versions. Absent des versions finales. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
