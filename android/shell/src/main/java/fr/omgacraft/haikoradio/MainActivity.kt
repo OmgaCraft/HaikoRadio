@@ -92,7 +92,8 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         webView.loadUrl(startUrl(intent))
 
         updateUi = UpdateUi(this)
-        if (!debugUpdateCheck(intent)) updateUi.checkOnStart()
+        // La vérification automatique se fait dans onResume (à l'ouverture et à chaque retour dans l'application).
+        if (!debugUpdateCheck(intent)) handleActions(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -100,7 +101,15 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         if (BuildConfig.DEBUG && intent.hasExtra(EXTRA_DEV_PATH)) {
             webView.loadUrl(startUrl(intent))
         }
-        debugUpdateCheck(intent)
+        if (!debugUpdateCheck(intent)) handleActions(intent)
+    }
+
+    /** Appui long sur l'icône de l'application -> « Rechercher une mise à jour » (raccourci défini dans res/xml/shortcuts.xml). */
+    private fun handleActions(intent: Intent) {
+        if (intent.action == ACTION_CHECK_UPDATE) {
+            intent.action = Intent.ACTION_MAIN // évite de refaire la recherche si l'écran est recréé
+            updateUi.check(manual = true)
+        }
     }
 
     /** Versions debug : `--es release_url http://10.0.2.2:8099/latest.json` teste la mise à jour avec un faux serveur de versions. */
@@ -118,6 +127,7 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         emitState()
         emitVolume()
         updateUi.onResume()
+        updateUi.checkOnStart() // au plus une vérification par heure
     }
 
     override fun onPause() {
@@ -346,6 +356,9 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         private const val APP_HOST = "appassets.androidplatform.net"
         private const val RADIO_HOST = "radio.omgacraft.fr"
         private const val BACKGROUND = 0xFF0A0C11.toInt()
+
+        /** Action du raccourci « Rechercher une mise à jour » (appui long sur l'icône de l'application). */
+        const val ACTION_CHECK_UPDATE = "fr.omgacraft.haikoradio.CHECK_UPDATE"
 
         /** Versions debug : adresse de la page de test à ouvrir (ex. `bridge-test.html?auto=1`). */
         const val EXTRA_DEV_PATH = "dev_path"

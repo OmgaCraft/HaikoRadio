@@ -14,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Ce que voit l'utilisateur pendant une mise à jour : une proposition au démarrage (au plus toutes les 6 h),
@@ -33,7 +34,14 @@ class UpdateUi(private val activity: Activity) {
     /** APK déjà téléchargé qui attend que l'utilisateur autorise l'installation dans les réglages d'Android. */
     private var pendingApk: File? = null
 
-    /** Vérification automatique au lancement : au plus une fois toutes les 6 h, pour ne pas solliciter GitHub à chaque ouverture. */
+    /** Vérification en cours : évite deux boîtes de dialogue si l'écran se rouvre pendant la vérification. */
+    private val checking = AtomicBoolean(false)
+    private var offerDialog: AlertDialog? = null
+
+    /**
+     * Vérification automatique à l'ouverture de l'application (et quand on y revient) : au plus une fois par heure,
+     * pour ne pas solliciter GitHub à chaque passage.
+     */
     fun checkOnStart() {
         if (System.currentTimeMillis() - prefs.getLong(KEY_LAST_CHECK, 0) < CHECK_INTERVAL_MS) return
         check(manual = false)
@@ -44,6 +52,12 @@ class UpdateUi(private val activity: Activity) {
      * [ignoreSnooze] : tests uniquement.
      */
     fun check(manual: Boolean, ignoreSnooze: Boolean = false) {
+        // Déjà une vérification, une proposition ou un téléchargement en cours : on n'en lance pas une deuxième.
+        if (offerDialog?.isShowing == true || progressDialog != null || !checking.compareAndSet(false, true)) {
+            if (manual) toast("Une mise à jour est déjà en cours de vérification.")
+            return
+        }
+        if (manual) toast("Recherche d'une mise à jour…")
         executor.execute {
             val info = try {
                 AppUpdater.fetchLatest()
@@ -54,6 +68,8 @@ class UpdateUi(private val activity: Activity) {
             val reached = info != null
             if (reached) prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
 
+            // Libère la garde même si l'écran vient d'être fermé (runOnUi ne s'exécute pas dans ce cas).
+            activity.runOnUiThread { checking.set(false) }
             runOnUi {
                 val current = AppUpdater.currentVersion()
                 when {
@@ -79,7 +95,7 @@ class UpdateUi(private val activity: Activity) {
 
     private fun offer(info: UpdateInfo) {
         val size = if (info.sizeBytes > 0) " (%.1f Mo)".format(info.sizeBytes / 1_048_576.0) else ""
-        AlertDialog.Builder(activity, DIALOG_THEME)
+        offerDialog = AlertDialog.Builder(activity, DIALOG_THEME)
             .setTitle("Mise à jour disponible")
             .setMessage("HaikoRadio ${info.version} est disponible$size.\nTu utilises la version ${AppUpdater.currentVersion()}.")
             .setPositiveButton("Mettre à jour") { _, _ -> download(info) }
@@ -214,7 +230,7 @@ class UpdateUi(private val activity: Activity) {
         private const val KEY_LAST_CHECK = "lastCheck"
         private const val KEY_SNOOZED_VERSION = "snoozedVersion"
         private const val KEY_SNOOZED_AT = "snoozedAt"
-        private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+        private const val CHECK_INTERVAL_MS = 60 * 60 * 1000L
         private const val SNOOZE_MS = 24 * 60 * 60 * 1000L
     }
 }

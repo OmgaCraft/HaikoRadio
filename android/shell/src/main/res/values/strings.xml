@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">HaikoRadio</string>
     <string name="notification_channel_name">Lecture de la radio</string>
+    <string name="shortcut_update_short">Mise à jour</string>
+    <string name="shortcut_update_long">Rechercher une mise à jour</string>
 </resources>

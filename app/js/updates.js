@@ -64,3 +64,31 @@
     native.onUpdateState(render);
     native.getUpdateState().then(render).catch(function () {});
 })();
+
+// ===== Application Android (début) =====
+// Android : la recherche, le téléchargement et l'installation sont gérés par l'application elle-même (boîtes de dialogue
+// d'Android) : la page affiche seulement la version et le bouton « Rechercher une mise à jour ». Le bandeau reste masqué.
+// Ce bloc ne s'active que si le pont Android window.HaikoNative (avec un H majuscule) existe ; il ne touche pas au
+// pont Windows window.haikoNative. Contrat : docs/android.md.
+(function () {
+    var bridge = window.HaikoNative;
+    var isAndroid = false;
+    try { isAndroid = !!(bridge && bridge.isNative && bridge.isNative()); } catch (e) {}
+    if (!isAndroid) { return; }
+
+    var versionEl = document.getElementById('app-version');
+    var checkBtn = document.getElementById('update-check');
+
+    try {
+        if (versionEl && bridge.appVersion) { versionEl.textContent = 'Application v' + bridge.appVersion(); }
+    } catch (e) {}
+
+    if (checkBtn && bridge.checkForUpdate) {
+        checkBtn.hidden = false;
+        // Pas d'argument : Android refuse un appel dont le nombre d'arguments ne correspond pas.
+        checkBtn.addEventListener('click', function () {
+            try { bridge.checkForUpdate(); } catch (e) {}
+        });
+    }
+})();
+// ===== Application Android (fin) =====

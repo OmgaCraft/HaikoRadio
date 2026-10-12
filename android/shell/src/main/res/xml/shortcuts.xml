@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Appui long sur l'icône de HaikoRadio : accès direct à la recherche d'une mise à jour. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="check_update"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_update"
+        android:shortcutShortLabel="@string/shortcut_update_short"
+        android:shortcutLongLabel="@string/shortcut_update_long">
+        <intent
+            android:action="fr.omgacraft.haikoradio.CHECK_UPDATE"
+            android:targetPackage="fr.omgacraft.haikoradio"
+            android:targetClass="fr.omgacraft.haikoradio.MainActivity" />
+    </shortcut>
+</shortcuts>

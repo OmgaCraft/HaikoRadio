@@ -79,7 +79,9 @@ du casque, pas seulement du bouton de la page.
 
 L'application se met à jour depuis les **Releases GitHub** du dépôt, sans passer par un magasin d'applications.
 
-1. **Vérification** : au lancement, au plus toutes les 6 h, l'application lit la dernière Release (`/releases/latest`).
+1. **Vérification** : à l'ouverture de l'application et à chaque retour dedans, **au plus une fois par heure** (6 h dans la 0.1.1 et la
+   0.1.2), l'application lit la dernière Release (`/releases/latest`). **À la demande** : appui long sur l'icône de l'application →
+   « Rechercher une mise à jour » (elle répond même s'il n'y a rien de nouveau, et ignore « Plus tard »).
    Elle compare le tag (`v0.1.1`) à sa propre version. Les brouillons et les pré-versions sont ignorés.
 2. **Proposition** : si la version est plus récente, une boîte de dialogue propose « Mettre à jour » ou « Plus tard »
    (« Plus tard » repousse de 24 h la même version).
@@ -95,7 +97,9 @@ L'application se met à jour depuis les **Releases GitHub** du dépôt, sans pas
 - Pour que la mise à jour soit proposée : tag `vX.Y.Z` (supérieur à la version installée) et un fichier `.apk` dans la Release,
   **signé avec la même clé** (voir « Signature et publication »). Ne pas passer la Release en brouillon ni en pré-version.
 - Le pont expose `HaikoNative.appVersion()` (version installée) et `HaikoNative.checkForUpdate()` (vérifie tout de suite et répond même
-  s'il n'y a rien de nouveau), utiles pour un bouton « Rechercher une mise à jour » dans l'interface.
+  s'il n'y a rien de nouveau). L'interface s'en sert : en bas de la page, « Application vX.Y.Z » et le lien « Rechercher une mise à jour »
+  (bloc « Application Android » de `app/js/updates.js`, actif seulement si `window.HaikoNative` existe ; le bandeau Windows reste masqué).
+  Appeler `checkForUpdate()` **sans argument**.
 - Certains téléphones (Google Play Protect) affichent leur propre vérification lors d'une installation hors Play Store : c'est normal.
 
 **Tester sans publier** (versions debug) : lancer l'application avec une adresse de faux serveur de versions,
