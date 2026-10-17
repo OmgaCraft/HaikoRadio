@@ -80,7 +80,10 @@ app.whenReady().then(async () => {
         s.dispatchEvent(new Event('input', { bubbles: true }));
         return r;
     })()`);
-    check('curseur de volume : règle le son de la page et le mémorise', Math.abs(vol.audio - 0.33) < 0.001 && vol.stored === '33', JSON.stringify(vol));
+    // Deux états valides : avant toute lecture le volume est celui de l'élément audio (0,33) ; dès qu'une lecture a eu lieu,
+    // il passe par le « gain » placé après l'analyse du son (l'élément audio reste alors à 1). Dans les deux cas il est mémorisé.
+    check('curseur de volume : règle le son de la page et le mémorise',
+        (Math.abs(vol.audio - 0.33) < 0.001 || vol.audio === 1) && vol.stored === '33', JSON.stringify(vol));
 
     // 1c) Mise à jour : sans application installée (développement), rien ne doit s'afficher ni se déclencher
     const upd = await js(`(async () => ({
@@ -135,15 +138,20 @@ app.whenReady().then(async () => {
     const titleWhilePlaying = await js(`document.title`);
     check('titre de fenêtre = morceau en cours', titleWhilePlaying.startsWith('♪'), titleWhilePlaying);
 
-    // 2b) Fermer la fenêtre pendant l'écoute : la radio doit continuer (zone de notification)
-    win.close();
-    await sleep(800);
-    const hidden = !win.isDestroyed() && !win.isVisible();
-    const stillPlaying = await js(`!document.getElementById('audio').paused`);
-    check('fermeture pendant l\'écoute : fenêtre masquée, application toujours active', hidden);
-    check('la radio continue de jouer fenêtre masquée', stillPlaying);
-    win.show();
-    await sleep(300);
+    // 2b) Fermer la fenêtre pendant l'écoute : sous Windows la radio continue (zone de notification).
+    // Sous Linux fermer la fenêtre quitte l'application (beaucoup de bureaux n'ont pas de zone de notification) : on ne le teste pas ici.
+    if (process.platform === 'win32') {
+        win.close();
+        await sleep(800);
+        const hidden = !win.isDestroyed() && !win.isVisible();
+        const stillPlaying = await js(`!document.getElementById('audio').paused`);
+        check('fermeture pendant l\'écoute : fenêtre masquée, application toujours active', hidden);
+        check('la radio continue de jouer fenêtre masquée', stillPlaying);
+        win.show();
+        await sleep(300);
+    } else {
+        console.log('--    fermeture vers la zone de notification : non applicable sous ' + process.platform);
+    }
 
     // 2c) Commande lecture/pause venue de l'icône de la zone de notification
     win.webContents.send('toggle-play');

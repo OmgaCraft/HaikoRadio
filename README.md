@@ -1,6 +1,6 @@
 # HaikoRadio
 
-Les applications de la webradio **HaikoRadio** : Windows (ici) et Android (à venir).
+Les applications de la webradio **HaikoRadio** : Windows et Linux (dossier `desktop/`), Android (dossier `android/`).
 Elles reprennent le site [radio.omgacraft.fr](https://radio.omgacraft.fr) : lecteur en direct, titre et pochette du morceau en cours, historique et planning de la semaine.
 
 ## Ce que fait l'application Windows
@@ -43,6 +43,32 @@ npm run dist
 Le fichier `HaikoRadio-Setup-<version>.exe` est écrit **hors du dossier du projet** (par défaut dans le dossier temporaire de Windows, son emplacement est affiché à la fin) : quand le projet est dans OneDrive, la synchronisation bloque la fabrication. Pour choisir le dossier : `HAIKO_DIST_DIR=C:\chemin npm run dist`.
 Ce fichier est l'installateur à publier dans une *Release* GitHub (c'est de là que le site propose le téléchargement).
 L'installateur n'est pas signé numériquement : Windows peut afficher un avertissement « SmartScreen » au premier lancement (« Informations complémentaires » puis « Exécuter quand même »).
+
+## Version Linux
+
+Deux formats sont fabriqués, pour Linux 64 bits (x86_64) :
+
+- **AppImage** (`HaikoRadio-<version>.AppImage`) : un seul fichier, sans installation. `chmod +x HaikoRadio-<version>.AppImage` puis double-clic ou `./HaikoRadio-<version>.AppImage`. C'est le format qui se met à jour tout seul. Il demande FUSE 2 (paquet `libfuse2`, ou `libfuse2t64` sur Ubuntu récent) ; sans lui : `./HaikoRadio-<version>.AppImage --appimage-extract-and-run`.
+- **Paquet .deb** (`HaikoRadio-<version>.deb`) pour Debian, Ubuntu, Mint… : `sudo apt install ./HaikoRadio-<version>.deb`. Le programme est installé dans `/opt/HaikoRadio` et apparaît dans le menu des applications (catégorie Son et vidéo).
+
+Différences avec Windows :
+- **Fermer la fenêtre quitte l'application.** Beaucoup de bureaux Linux (GNOME…) n'ont pas de zone de notification : une fenêtre masquée y serait introuvable. L'icône de notification existe quand le bureau la gère (KDE, XFCE…).
+- **Lancement automatique :** l'option du menu de l'icône écrit (ou supprime) `~/.config/autostart/haikoradio.desktop`.
+- **Touches multimédia :** gérées par le système (norme MPRIS) quand le bureau les propose.
+- **Bac à sable de Chromium (AppImage) :** sur Ubuntu 23.10 et suivantes, le système interdit à un programme ordinaire de le démarrer ; l'application le détecte et le désactive alors seule (elle n'affiche que ses propres fichiers). Le paquet .deb, installé avec les droits administrateur, n'a pas ce problème.
+- **Mises à jour :** l'AppImage les récupère toute seule (comme la version Windows). Le .deb se met à jour en installant la nouvelle version.
+
+### Fabriquer les fichiers Linux
+
+Le plus simple : **GitHub s'en charge** (fichier `.github/workflows/linux.yml`). Onglet *Actions* du dépôt → *Linux* → *Run workflow* : il lance l'application sur un écran virtuel, fabrique l'AppImage et le .deb, **lance ces fichiers fabriqués pour vérifier qu'ils démarrent**, et les met à disposition dans « Artifacts » (conservés 14 jours). Il se déclenche aussi à chaque changement de `app/` ou `desktop/`.
+
+Sur une machine Linux : `cd desktop && npm install && npm run dist:linux` (résultat dans `/tmp/haikoradio-dist-linux`, ou `HAIKO_DIST_DIR=…`). La fabrication de l'AppImage ne fonctionne pas sous Windows.
+
+Vérifier un fichier fabriqué (démarrage, données du site, lecture du son) : `node test/packaged-check.js ./HaikoRadio-<version>.AppImage --appimage-extract-and-run`.
+
+### Publier les fichiers Linux
+
+Mêmes règles que Windows (la Release `v<version>` doit exister, rien n'est envoyé sans `--yes`) : télécharger les « Artifacts » du dernier passage réussi du workflow dans un dossier, puis `HAIKO_DIST_DIR=<ce dossier> npm run publish -- --linux` (simulation) et `… -- --linux --yes`. Fichiers envoyés : l'AppImage, son `.blockmap` et le `.deb` (s'ils existent) et **`latest-linux.yml`**, indispensable aux mises à jour. La Release peut ainsi contenir ensemble les fichiers Windows, Linux et Android.
 
 ## Publier une nouvelle version (mise à jour automatique)
 

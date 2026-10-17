@@ -22,7 +22,9 @@ const REPO = 'OmgaCraft/HaikoRadio';
 const root = path.join(__dirname, '..', '..');
 const version = require('../package.json').version;
 const tag = `v${version}`;
-const distDir = process.env.HAIKO_DIST_DIR || path.join(os.tmpdir(), 'haikoradio-dist');
+// Windows par défaut ; « npm run publish -- --linux » envoie les fichiers Linux (fabriqués avec npm run dist:linux, ou par GitHub).
+const platform = process.argv.includes('--linux') ? 'linux' : 'win';
+const distDir = process.env.HAIKO_DIST_DIR || path.join(os.tmpdir(), platform === 'linux' ? 'haikoradio-dist-linux' : 'haikoradio-dist');
 const publish = process.argv.includes('--yes');
 
 function fail(message) {
@@ -59,18 +61,36 @@ async function api(token, method, url, body, headers = {}) {
     console.log(`Version ${version} (étiquette ${tag}) — ${publish ? 'PUBLICATION' : 'simulation, rien n\'est envoyé'}\n`);
 
     // 1) Les fichiers fabriqués
-    const files = [
-        { name: `HaikoRadio-Setup-${version}.exe`, type: 'application/octet-stream' },
-        { name: `HaikoRadio-Setup-${version}.exe.blockmap`, type: 'application/octet-stream' },
-        { name: 'latest.yml', type: 'text/yaml' }
-    ].map((f) => ({ ...f, path: path.join(distDir, f.name) }));
-    for (const f of files) {
-        if (!fs.existsSync(f.path)) { fail(`fichier introuvable : ${f.path}\nFabrique d'abord l'installateur : npm run dist`); }
-        console.log(`  ${f.name}  (${(fs.statSync(f.path).size / 1048576).toFixed(1)} Mo)`);
+    // main : le fichier principal (sert à vérifier qu'il est plus récent que le code) ; info : le fichier lu par la mise à jour ;
+    // optional : envoyé seulement s'il existe.
+    const spec = platform === 'linux'
+        ? [
+            { name: `HaikoRadio-${version}.AppImage`, role: 'main' },
+            { name: `HaikoRadio-${version}.AppImage.blockmap`, optional: true },
+            { name: `HaikoRadio-${version}.deb`, optional: true },
+            { name: 'latest-linux.yml', role: 'info', type: 'text/yaml' }
+        ]
+        : [
+            { name: `HaikoRadio-Setup-${version}.exe`, role: 'main' },
+            { name: `HaikoRadio-Setup-${version}.exe.blockmap` },
+            { name: 'latest.yml', role: 'info', type: 'text/yaml' }
+        ];
+    const buildCommand = platform === 'linux' ? 'npm run dist:linux' : 'npm run dist';
+    const files = [];
+    for (const f of spec) {
+        const full = { type: 'application/octet-stream', ...f, path: path.join(distDir, f.name) };
+        if (!fs.existsSync(full.path)) {
+            if (f.optional) { continue; }
+            fail(`fichier introuvable : ${full.path}\nFabrique d'abord l'installateur : ${buildCommand}`);
+        }
+        files.push(full);
+        console.log(`  ${full.name}  (${(fs.statSync(full.path).size / 1048576).toFixed(1)} Mo)`);
     }
-    const yml = fs.readFileSync(files[2].path, 'utf8');
+    const mainFile = files.find((f) => f.role === 'main');
+    const infoFile = files.find((f) => f.role === 'info');
+    const yml = fs.readFileSync(infoFile.path, 'utf8');
     if (!new RegExp(`^version:\\s*${version.replace(/\./g, '\\.')}\\s*$`, 'm').test(yml)) {
-        fail(`latest.yml ne correspond pas à la version ${version} : refabrique l'installateur.`);
+        fail(`${infoFile.name} ne correspond pas à la version ${version} : refabrique l'installateur.`);
     }
 
     // 2) Le code de l'installateur doit être enregistré, envoyé, et plus ancien que l'installateur.
@@ -82,7 +102,7 @@ async function api(token, method, url, body, headers = {}) {
     const head = git('rev-parse', 'HEAD');
     if (head !== git('rev-parse', 'origin/main')) { fail('le code local n\'est pas celui de GitHub (envoie-le avec git push).'); }
     const commitTime = Number(git('log', '-1', '--format=%ct', 'HEAD', '--', ...packaged)) * 1000;
-    if (fs.statSync(files[0].path).mtimeMs < commitTime) { fail('l\'installateur est plus ancien que le dernier changement de l\'application : refabrique-le (npm run dist).'); }
+    if (fs.statSync(mainFile.path).mtimeMs < commitTime) { fail(`l'installateur est plus ancien que le dernier changement de l'application : refabrique-le (${buildCommand}).`); }
     console.log(`\nCode de l'application : identique à GitHub (HEAD ${head.slice(0, 7)}). Installateur fabriqué après le dernier changement.`);
 
     if (!publish) {

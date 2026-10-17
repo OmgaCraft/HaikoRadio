@@ -21,13 +21,14 @@ L'interface est reprise du site `radio.omgacraft.fr` (même thème, mêmes compo
 | `vendor/hls.min.js` | Lecteur HLS (hls.js, licence Apache 2.0) |
 | `data/planning.json` | Copie du planning (secours si le site ne le fournit pas) |
 
-## Application Windows (`desktop/`)
+## Application Windows et Linux (`desktop/`)
 
 - `main.js` : fenêtre, icône de notification, protocole `app://` qui sert l'interface depuis les fichiers locaux, accès réseau limité à `radio.omgacraft.fr`.
 - `preload.js` : les seules fonctions données à l'interface (`getJson`, `setState`, `onTogglePlay`, `getVersion`, et pour les mises à jour `getUpdateState`, `onUpdateState`, `checkForUpdates`, `installUpdate`).
 - `updater.js` : mise à jour automatique (electron-updater, Releases GitHub). États : `disabled`, `idle`, `checking`, `downloading`, `ready`, `none`, `error`.
 - `scripts/dist.js` : fabrique l'installateur (hors OneDrive). `scripts/publish.js` : publie la Release (simulation par défaut).
-- `test/smoke.js` : test automatique.
+- `test/smoke.js` : test automatique du code source. `test/packaged-check.js` : vérifie une application FABRIQUÉE (installateur, AppImage, .deb).
+- Linux : `main.js` adapte le comportement (fermer = quitter, lancement automatique par fichier `.desktop`, bac à sable) ; `updater.js` lit `latest-linux.yml` ; le workflow `.github/workflows/linux.yml` fabrique et vérifie les paquets sur un vrai Linux.
 
 ## Ce qui est copié du site (à garder en phase)
 

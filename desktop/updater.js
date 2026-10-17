@@ -20,6 +20,9 @@ const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;    // puis toutes les 4 heures
 // Pour les tests uniquement : un faux « serveur de mises à jour » sur cet ordinateur (jamais une adresse distante).
 const LOCAL_FEED = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//;
 
+// Fichier que l'outil de mise à jour lit dans la Release (il dépend du système).
+const FEED_FILE = process.platform === 'linux' ? 'latest-linux.yml' : 'latest.yml';
+
 // Où chercher : la liste des Releases du dépôt, puis le dossier de téléchargement de celle qu'on retient.
 const RELEASES_API = 'https://api.github.com/repos/OmgaCraft/HaikoRadio/releases?per_page=20';
 const DOWNLOAD_BASE = 'https://github.com/OmgaCraft/HaikoRadio/releases/download';
@@ -37,18 +40,19 @@ function set(patch) {
 }
 
 /**
- * Choisit la Release qui sert de source de mise à jour : la plus récente qui contient un fichier latest.yml.
+ * Choisit la Release qui sert de source de mise à jour : la plus récente qui contient le fichier d'information de ce
+ * système (latest.yml sous Windows, latest-linux.yml sous Linux).
  * Une Release publiée seulement pour Android (APK seul) n'en contient pas : on la saute au lieu de perdre
  * les mises à jour Windows. Brouillons et pré-versions sont ignorés.
  * @returns {string|null} l'étiquette (ex. « v0.1.4 »), ou null si aucune ne convient
  */
-function pickFeedTag(releases) {
+function pickFeedTag(releases, feedFile = FEED_FILE) {
     if (!Array.isArray(releases)) { return null; }
     for (const release of releases) {
         if (!release || release.draft || release.prerelease) { continue; }
         if (typeof release.tag_name !== 'string' || !/^v?\d+\.\d+\.\d+$/.test(release.tag_name)) { continue; }
         const assets = Array.isArray(release.assets) ? release.assets : [];
-        if (assets.some((a) => a && a.name === 'latest.yml')) { return release.tag_name; }
+        if (assets.some((a) => a && a.name === feedFile)) { return release.tag_name; }
     }
     return null;
 }

@@ -1,0 +1,129 @@
+# Version Linux de HaikoRadio : test, fabrication (AppImage + paquet .deb) et vérification des fichiers fabriqués.
+#
+# Ce fichier fait travailler les serveurs Linux gratuits de GitHub : on y lance l'application sur un écran virtuel,
+# on fabrique les paquets, puis on lance ces paquets pour vérifier qu'ils démarrent vraiment.
+# Rien n'est publié : les fichiers fabriqués sont simplement mis à disposition dans l'onglet « Actions » du dépôt
+# (rubrique « Artifacts »). La publication d'une Release reste une action manuelle (voir README).
+#
+# Déclenchement : à la main (bouton « Run workflow » de l'onglet Actions) ou quand l'application change.
+
+name: Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'app/**'
+      - '.github/workflows/linux.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      DIST_DIR: ${{ github.workspace }}/dist-linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Installer l'écran virtuel, le son et les bibliothèques d'Electron
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb pulseaudio dbus-x11 libfuse2t64 \
+            libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libxss1 libxtst6 \
+            libatk-bridge2.0-0t64 libcups2t64 libdrm2 libxkbcommon0 libx11-xcb1
+          # Une carte son virtuelle : sans elle, aucune lecture audio n'est possible sur un serveur.
+          pulseaudio --start --exit-idle-time=-1 --daemonize=yes || true
+          pactl load-module module-null-sink sink_name=ci_sink || true
+          pactl set-default-sink ci_sink || true
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Test automatique de l'application (code source, écran virtuel)
+        id: smoke
+        continue-on-error: true
+        env:
+          HAIKO_SMOKE_DIR: ${{ github.workspace }}/captures
+        run: xvfb-run -a --server-args="-screen 0 1280x900x24" npx electron . --no-sandbox 2>&1 | tee "$RUNNER_TEMP/smoke.log"
+
+      - name: Résumé du test automatique
+        if: always()
+        run: |
+          echo '### Test automatique (code source)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES)|^ - ' "$RUNNER_TEMP/smoke.log" | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fabriquer l'AppImage et le paquet .deb
+        env:
+          HAIKO_DIST_DIR: ${{ env.DIST_DIR }}
+        run: npm run dist:linux
+
+      - name: Contenu des fichiers fabriqués
+        run: |
+          ls -la "$DIST_DIR"
+          echo '--- latest-linux.yml'; cat "$DIST_DIR/latest-linux.yml"
+          echo '--- paquet .deb'; dpkg-deb --info "$DIST_DIR"/*.deb | head -20
+
+      - name: Lancer l'AppImage fabriquée et vérifier qu'elle fonctionne
+        id: appimage
+        continue-on-error: true
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          chmod +x "$DIST_DIR/HaikoRadio-$VERSION.AppImage"
+          # Volontairement SANS --no-sandbox : l'application doit gérer seule les bureaux qui l'interdisent.
+          xvfb-run -a --server-args="-screen 0 1280x900x24" node test/packaged-check.js \
+            "$DIST_DIR/HaikoRadio-$VERSION.AppImage" --appimage-extract-and-run 2>&1 | tee "$RUNNER_TEMP/appimage.log"
+
+      - name: Installer le paquet .deb et vérifier le programme installé
+        id: deb
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y "$DIST_DIR"/*.deb
+          ls -la /opt/HaikoRadio | head -5
+          xvfb-run -a --server-args="-screen 0 1280x900x24" node test/packaged-check.js /opt/HaikoRadio/haikoradio 2>&1 | tee "$RUNNER_TEMP/deb.log"
+
+      - name: Résumé des vérifications des fichiers fabriqués
+        if: always()
+        run: |
+          for name in appimage deb; do
+            echo "### Vérification : $name" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES|Erreur)' "$RUNNER_TEMP/$name.log" 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo '(pas de résultat)' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Mettre les fichiers à disposition
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: haikoradio-linux
+          path: |
+            ${{ env.DIST_DIR }}/*.AppImage
+            ${{ env.DIST_DIR }}/*.AppImage.blockmap
+            ${{ env.DIST_DIR }}/*.deb
+            ${{ env.DIST_DIR }}/latest-linux.yml
+            ${{ github.workspace }}/captures/*.png
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Échec du travail si un contrôle a échoué
+        if: always()
+        run: |
+          echo "test automatique : ${{ steps.smoke.outcome }} | AppImage : ${{ steps.appimage.outcome }} | .deb : ${{ steps.deb.outcome }}"
+          [ "${{ steps.appimage.outcome }}" = "success" ] && [ "${{ steps.deb.outcome }}" = "success" ] && [ "${{ steps.smoke.outcome }}" = "success" ]

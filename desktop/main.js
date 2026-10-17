@@ -29,6 +29,23 @@ if (smokeTest) {
     app.setPath('userData', path.join(require('os').tmpdir(), 'haikoradio-smoke-profile'));
 }
 
+const isLinux = process.platform === 'linux';
+// Sous Windows, fermer la fenêtre pendant l'écoute la laisse jouer dans la zone de notification. Sous Linux, beaucoup de
+// bureaux (GNOME…) n'affichent pas d'icône de notification : une fenêtre masquée y serait introuvable, donc fermer = quitter.
+const HIDE_TO_TRAY = process.platform === 'win32';
+
+// Linux, AppImage : sur les distributions qui interdisent aux programmes ordinaires de créer des « espaces de noms »
+// (Ubuntu 23.10 et suivantes), le bac à sable de Chromium ne peut pas démarrer sans installation avec droits
+// administrateur, et l'application ne s'ouvrirait pas du tout. Dans ce seul cas on le désactive (l'interface
+// ne charge que ses propres fichiers et deux flux audio, jamais de page web distante). Le paquet .deb, lui, l'installe correctement.
+if (isLinux && process.env.APPIMAGE) {
+    const readFlag = (file) => { try { return fs.readFileSync(file, 'utf8').trim(); } catch (e) { return null; } };
+    if (readFlag('/proc/sys/kernel/apparmor_restrict_unprivileged_userns') === '1' ||
+        readFlag('/proc/sys/kernel/unprivileged_userns_clone') === '0') {
+        app.commandLine.appendSwitch('no-sandbox');
+    }
+}
+
 let win = null;
 let tray = null;
 let quitting = false;
@@ -121,7 +138,7 @@ function createWindow() {
     // Fermer la fenêtre pendant l'écoute : la radio continue dans la zone de notification.
     win.on('close', (event) => {
         saveWindowState();
-        if (!quitting && playing) {
+        if (!quitting && playing && HIDE_TO_TRAY) {
             event.preventDefault();
             win.hide();
             if (!balloonShown && tray && process.platform === 'win32') {
@@ -172,6 +189,42 @@ function debounce(fn, ms) {
     return () => { clearTimeout(timer); timer = setTimeout(fn, ms); };
 }
 
+// ---------- Démarrage avec la session ----------
+
+// Windows : réglage du système. Linux : un fichier « .desktop » dans ~/.config/autostart (norme freedesktop,
+// comprise par GNOME, KDE, XFCE…), qui relance l'AppImage ou l'application installée, fenêtre masquée.
+const autostartFile = () => path.join(app.getPath('home'), '.config', 'autostart', 'haikoradio.desktop');
+
+function getAutoStart() {
+    return isLinux ? fs.existsSync(autostartFile()) : app.getLoginItemSettings().openAtLogin;
+}
+
+function setAutoStart(enabled) {
+    if (!isLinux) {
+        app.setLoginItemSettings({ openAtLogin: enabled, args: ['--hidden'] });
+        return;
+    }
+    try {
+        if (!enabled) { fs.rmSync(autostartFile(), { force: true }); return; }
+        // Dans la ligne « Exec » du fichier .desktop, les guillemets, $, ` et \ doivent être protégés.
+        const exec = (process.env.APPIMAGE || process.execPath).replace(/(["`$\\])/g, '\\$1');
+        fs.mkdirSync(path.dirname(autostartFile()), { recursive: true });
+        fs.writeFileSync(autostartFile(), [
+            '[Desktop Entry]',
+            'Type=Application',
+            'Name=HaikoRadio',
+            'Comment=La webradio HaikoRadio',
+            `Exec="${exec}" --hidden`,
+            'Icon=haikoradio',
+            'Terminal=false',
+            'X-GNOME-Autostart-enabled=true',
+            ''
+        ].join('\n'));
+    } catch (e) {
+        console.error('[démarrage avec la session] échec :', e && e.message ? e.message : e);
+    }
+}
+
 // ---------- Icône de la zone de notification ----------
 
 function buildTrayMenu() {
@@ -188,10 +241,10 @@ function buildTrayMenu() {
         { type: 'separator' },
         ...updateMenuItems(),
         {
-            label: 'Lancer avec Windows',
+            label: isLinux ? 'Lancer au démarrage de la session' : 'Lancer avec Windows',
             type: 'checkbox',
-            checked: app.getLoginItemSettings().openAtLogin,
-            click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] })
+            checked: getAutoStart(),
+            click: (item) => setAutoStart(item.checked)
         },
         { type: 'separator' },
         { label: 'Quitter', click: () => { quitting = true; app.quit(); } }
@@ -239,7 +292,13 @@ function updateTray() {
 }
 
 function createTray() {
-    tray = new Tray(nativeImage.createFromPath(TRAY_ICON));
+    try {
+        tray = new Tray(nativeImage.createFromPath(TRAY_ICON));
+    } catch (e) {
+        tray = null; // pas de zone de notification sur ce bureau : l'application fonctionne sans
+        console.error('[icône de notification] indisponible :', e && e.message ? e.message : e);
+        return;
+    }
     tray.on('click', () => {
         if (win && win.isVisible() && win.isFocused()) { win.hide(); } else { showWindow(); }
     });
@@ -296,7 +355,7 @@ app.whenReady().then(() => {
 
 // Même fenêtre fermée, l'application reste active tant qu'on n'a pas choisi "Quitter" (ou que la radio ne joue pas).
 app.on('window-all-closed', () => {
-    if (quitting || !playing) { app.quit(); }
+    if (quitting || !playing || !HIDE_TO_TRAY) { app.quit(); }
 });
 app.on('before-quit', () => { quitting = true; });
 
