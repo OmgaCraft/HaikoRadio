@@ -21,7 +21,9 @@ const { execFileSync } = require('child_process');
 const REPO = 'OmgaCraft/HaikoRadio';
 const root = path.join(__dirname, '..', '..');
 const version = require('../package.json').version;
-const tag = `v${version}`;
+const tagArg = process.argv.indexOf('--tag');
+const tag = tagArg > 0 && /^v?[0-9A-Za-z._-]+$/.test(process.argv[tagArg + 1] || '') ? process.argv[tagArg + 1] : `v${version}`;
+const notLatest = process.argv.includes('--not-latest'); // la Release créée ne devient pas « la dernière » (les mises à jour d'autres applications lisent « la dernière »)
 // Windows par défaut ; « npm run publish -- --linux » envoie les fichiers Linux (fabriqués avec npm run dist:linux, ou par GitHub).
 const platform = process.argv.includes('--linux') ? 'linux' : 'win';
 const distDir = process.env.HAIKO_DIST_DIR || path.join(os.tmpdir(), platform === 'linux' ? 'haikoradio-dist-linux' : 'haikoradio-dist');
@@ -68,6 +70,7 @@ async function api(token, method, url, body, headers = {}) {
             { name: `HaikoRadio-${version}.AppImage`, role: 'main' },
             { name: `HaikoRadio-${version}.AppImage.blockmap`, optional: true },
             { name: `HaikoRadio-${version}.deb`, optional: true },
+            { name: `HaikoRadio-${version}.rpm`, optional: true },
             { name: 'latest-linux.yml', role: 'info', type: 'text/yaml' }
         ]
         : [
@@ -124,8 +127,11 @@ async function api(token, method, url, body, headers = {}) {
         res = await api(token, 'POST', `https://api.github.com/repos/${REPO}/releases`, JSON.stringify({
             tag_name: tag,
             target_commitish: head,
-            name: `HaikoRadio ${version}`,
-            body: `Application Windows de HaikoRadio ${version}. Les applications déjà installées se mettent à jour toutes seules.`,
+            name: platform === 'linux' ? `HaikoRadio ${version} — Linux` : `HaikoRadio ${version}`,
+            body: platform === 'linux'
+                ? `Application Linux de HaikoRadio ${version} : AppImage (toutes distributions), paquet .deb (Debian, Ubuntu, Mint…) et paquet .rpm (Fedora, openSUSE…).\n\nFedora : sudo dnf install ./HaikoRadio-${version}.rpm\nAppImage : chmod +x HaikoRadio-${version}.AppImage puis ./HaikoRadio-${version}.AppImage (Fedora : paquet fuse-libs requis, ou option --appimage-extract-and-run).`
+                : `Application Windows de HaikoRadio ${version}. Les applications déjà installées se mettent à jour toutes seules.`,
+            ...(notLatest ? { make_latest: 'false' } : {}),
             draft: false,
             prerelease: false
         }), { 'Content-Type': 'application/json' });

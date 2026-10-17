@@ -44,7 +44,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            xvfb pulseaudio dbus-x11 libfuse2t64 \
+            xvfb pulseaudio dbus-x11 libfuse2t64 rpm \
             libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libxss1 libxtst6 \
             libatk-bridge2.0-0t64 libcups2t64 libdrm2 libxkbcommon0 libx11-xcb1
           # Une carte son virtuelle : sans elle, aucune lecture audio n'est possible sur un serveur.
@@ -85,6 +85,7 @@ jobs:
           ls -la "$DIST_DIR"
           echo '--- latest-linux.yml'; cat "$DIST_DIR/latest-linux.yml"
           echo '--- paquet .deb'; dpkg-deb --info "$DIST_DIR"/*.deb | head -20
+          echo '--- paquet .rpm'; rpm -qpi "$DIST_DIR"/*.rpm | head -20; rpm -qpR "$DIST_DIR"/*.rpm | head -20
 
       - name: Lancer l'AppImage fabriquée et vérifier qu'elle fonctionne
         id: appimage
@@ -129,6 +130,7 @@ jobs:
             ${{ env.DIST_DIR }}/*.AppImage
             ${{ env.DIST_DIR }}/*.AppImage.blockmap
             ${{ env.DIST_DIR }}/*.deb
+            ${{ env.DIST_DIR }}/*.rpm
             ${{ env.DIST_DIR }}/latest-linux.yml
             ${{ github.workspace }}/captures/*.png
             ${{ github.workspace }}/captures/*.log
@@ -140,3 +142,58 @@ jobs:
         run: |
           echo "test automatique : ${{ steps.smoke.outcome }} | AppImage : ${{ steps.appimage.outcome }} | .deb : ${{ steps.deb.outcome }}"
           [ "${{ steps.appimage.outcome }}" = "success" ] && [ "${{ steps.deb.outcome }}" = "success" ] && [ "${{ steps.smoke.outcome }}" = "success" ]
+
+  fedora:
+    # Fedora (version courante) : installation du paquet .rpm avec dnf, puis lancement du programme installé.
+    needs: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: fedora:latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Installer les outils (écran virtuel, Node.js, session D-Bus)
+        run: |
+          head -3 /etc/os-release
+          dnf install -y nodejs xorg-x11-server-Xvfb dbus-x11 mesa-dri-drivers alsa-lib tar gzip
+          node --version
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: haikoradio-linux
+          path: paquets
+
+      - name: Installer le paquet .rpm avec dnf
+        run: |
+          ls -la paquets
+          dnf install -y ./paquets/*.rpm
+          echo '--- fichiers installés'; ls -la /opt/HaikoRadio | head -8
+          echo '--- bac à sable (chrome-sandbox doit être setuid root : -rwsr-xr-x)'; ls -la /opt/HaikoRadio/chrome-sandbox
+          echo '--- paquet installé'; rpm -qa | grep -i haiko
+          echo '--- entrée de menu'; grep -E '^(Name|Exec|Categories)=' /usr/share/applications/haikoradio.desktop || true
+
+      - name: Lancer le programme installé sur Fedora et vérifier qu'il fonctionne
+        id: fedora
+        timeout-minutes: 8
+        env:
+          HAIKO_CHECK_AUDIO: '0' # pas de carte son dans ce conteneur : la lecture du son est vérifiée sur Ubuntu
+        run: |
+          mkdir -p captures
+          eval "$(dbus-launch --sh-syntax)"
+          # --no-sandbox : ici on est administrateur (root) dans un conteneur, Chromium l'exige dans ce cas précis
+          xvfb-run -a --server-args="-screen 0 1280x900x24" node desktop/test/packaged-check.js /opt/HaikoRadio/haikoradio --no-sandbox --disable-gpu 2>&1 | tee captures/fedora.log
+
+      - name: Résumé Fedora
+        if: always()
+        run: |
+          {
+            echo '### Vérification : Fedora (.rpm installé avec dnf)'
+            echo '```'
+            head -2 /etc/os-release
+            grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES|Erreur)' captures/fedora.log 2>/dev/null | cut -c1-200 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

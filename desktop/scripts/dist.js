@@ -3,7 +3,7 @@
 /*
  * Fabrique l'installateur.
  *     npm run dist          -> Windows (installateur .exe)
- *     npm run dist:linux    -> Linux (AppImage + paquet .deb) : à lancer sous Linux (ou par GitHub, voir .github/workflows)
+ *     npm run dist:linux    -> Linux (AppImage + paquets .deb et .rpm) : à lancer sous Linux (ou par GitHub, voir .github/workflows)
  * Le résultat est écrit HORS du dossier du projet (par défaut dans le dossier temporaire du système) :
  * quand le projet est dans OneDrive, la synchronisation verrouille les fichiers et la fabrication échoue.
  * Pour choisir un autre dossier :  HAIKO_DIST_DIR=C:\chemin npm run dist
@@ -22,7 +22,7 @@ const out = process.env.HAIKO_DIST_DIR || defaultDir;
 // « --publish never » : cet outil ne publie jamais rien lui-même (sur GitHub il essaierait de le faire et réclamerait un
 // jeton). La publication est une étape volontaire : voir scripts/publish.js. Les fichiers de mise à jour (latest*.yml) sont créés quand même.
 const builderArgs = target === 'linux'
-    ? ['--linux', 'AppImage', 'deb', '--x64', '--publish', 'never']
+    ? ['--linux', 'AppImage', 'deb', 'rpm', '--x64', '--publish', 'never']
     : ['--win', '--x64', '--publish', 'never'];
 
 const result = spawnSync(

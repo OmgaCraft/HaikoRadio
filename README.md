@@ -46,10 +46,11 @@ L'installateur n'est pas signé numériquement : Windows peut afficher un averti
 
 ## Version Linux
 
-Deux formats sont fabriqués, pour Linux 64 bits (x86_64) :
+Trois formats sont fabriqués, pour Linux 64 bits (x86_64) :
 
 - **AppImage** (`HaikoRadio-<version>.AppImage`) : un seul fichier, sans installation. `chmod +x HaikoRadio-<version>.AppImage` puis double-clic ou `./HaikoRadio-<version>.AppImage`. C'est le format qui se met à jour tout seul. Il demande FUSE 2 (paquet `libfuse2`, ou `libfuse2t64` sur Ubuntu récent) ; sans lui : `./HaikoRadio-<version>.AppImage --appimage-extract-and-run`.
 - **Paquet .deb** (`HaikoRadio-<version>.deb`) pour Debian, Ubuntu, Mint… : `sudo apt install ./HaikoRadio-<version>.deb`. Le programme est installé dans `/opt/HaikoRadio` et apparaît dans le menu des applications (catégorie Son et vidéo).
+- **Paquet .rpm** (`HaikoRadio-<version>.rpm`) pour **Fedora**, openSUSE, RHEL… : `sudo dnf install ./HaikoRadio-<version>.rpm` (les dépendances sont installées automatiquement). Même emplacement et même entrée de menu que le .deb. Sur Fedora, l'AppImage demande le paquet `fuse-libs` (`sudo dnf install fuse-libs`) ; sinon `--appimage-extract-and-run`. Le workflow installe le .rpm sur un vrai Fedora et lance le programme installé avant de le proposer.
 
 Différences avec Windows :
 - **Fermer la fenêtre quitte l'application.** Beaucoup de bureaux Linux (GNOME…) n'ont pas de zone de notification : une fenêtre masquée y serait introuvable. L'icône de notification existe quand le bureau la gère (KDE, XFCE…).
@@ -68,7 +69,8 @@ Vérifier un fichier fabriqué (démarrage, données du site, lecture du son) : 
 
 ### Publier les fichiers Linux
 
-Mêmes règles que Windows (la Release `v<version>` doit exister, rien n'est envoyé sans `--yes`) : télécharger les « Artifacts » du dernier passage réussi du workflow dans un dossier, puis `HAIKO_DIST_DIR=<ce dossier> npm run publish -- --linux` (simulation) et `… -- --linux --yes`. Fichiers envoyés : l'AppImage, son `.blockmap` et le `.deb` (s'ils existent) et **`latest-linux.yml`**, indispensable aux mises à jour. La Release peut ainsi contenir ensemble les fichiers Windows, Linux et Android.
+Mêmes règles que Windows (la Release `v<version>` doit exister, rien n'est envoyé sans `--yes`) : télécharger les « Artifacts » du dernier passage réussi du workflow dans un dossier, puis `HAIKO_DIST_DIR=<ce dossier> npm run publish -- --linux` (simulation) et `… -- --linux --yes`. Fichiers envoyés : l'AppImage, son `.blockmap`, le `.deb` et le `.rpm` (s'ils existent) et **`latest-linux.yml`**, indispensable aux mises à jour. La Release peut ainsi contenir ensemble les fichiers Windows, Linux et Android.
+Pour une version Linux publiée **seule** (sans nouvelle version Windows ni Android) : `-- --linux --tag v0.1.4-linux --create-release --not-latest --yes`. `--not-latest` empêche cette Release de devenir « la dernière » : l'application Android lit « la dernière Release » pour ses mises à jour et n'y trouverait pas d'APK. Le site, lui, parcourt toutes les Releases normales (pas les pré-versions) et y trouve les fichiers Linux.
 
 ## Publier une nouvelle version (mise à jour automatique)
 
