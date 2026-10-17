@@ -13,20 +13,61 @@
  *   manual : la vérification a été demandée par l'utilisateur (on lui répond) ; sinon elle est silencieuse.
  */
 
-const { app, ipcMain } = require('electron');
+const { app, ipcMain, net } = require('electron');
 
 const FIRST_CHECK_DELAY_MS = 15 * 1000;       // laisse l'application démarrer tranquillement
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;    // puis toutes les 4 heures
 // Pour les tests uniquement : un faux « serveur de mises à jour » sur cet ordinateur (jamais une adresse distante).
 const LOCAL_FEED = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//;
 
+// Où chercher : la liste des Releases du dépôt, puis le dossier de téléchargement de celle qu'on retient.
+const RELEASES_API = 'https://api.github.com/repos/OmgaCraft/HaikoRadio/releases?per_page=20';
+const DOWNLOAD_BASE = 'https://github.com/OmgaCraft/HaikoRadio/releases/download';
+
 let autoUpdater = null;
+let localFeed = null;      // test : faux serveur de mises à jour local
+let releasesApi = RELEASES_API;
+let downloadBase = DOWNLOAD_BASE;
 let state = { status: 'disabled', version: '', percent: 0, manual: false, message: '' };
 let notify = () => {};
 
 function set(patch) {
     state = { ...state, ...patch };
     notify(state);
+}
+
+/**
+ * Choisit la Release qui sert de source de mise à jour : la plus récente qui contient un fichier latest.yml.
+ * Une Release publiée seulement pour Android (APK seul) n'en contient pas : on la saute au lieu de perdre
+ * les mises à jour Windows. Brouillons et pré-versions sont ignorés.
+ * @returns {string|null} l'étiquette (ex. « v0.1.4 »), ou null si aucune ne convient
+ */
+function pickFeedTag(releases) {
+    if (!Array.isArray(releases)) { return null; }
+    for (const release of releases) {
+        if (!release || release.draft || release.prerelease) { continue; }
+        if (typeof release.tag_name !== 'string' || !/^v?\d+\.\d+\.\d+$/.test(release.tag_name)) { continue; }
+        const assets = Array.isArray(release.assets) ? release.assets : [];
+        if (assets.some((a) => a && a.name === 'latest.yml')) { return release.tag_name; }
+    }
+    return null;
+}
+
+// Pointe l'outil de mise à jour vers la bonne Release. En cas d'échec (réseau, limite de GitHub…), on garde la source
+// précédente ou celle par défaut : une vérification ratée reste sans conséquence.
+async function resolveFeed() {
+    if (!autoUpdater || (localFeed && !process.env.HAIKO_RELEASES_API)) { return; }
+    try {
+        const res = await net.fetch(releasesApi, {
+            headers: { Accept: 'application/vnd.github+json' },
+            signal: AbortSignal.timeout(8000)
+        });
+        if (!res.ok) { return; }
+        const tag = pickFeedTag(await res.json());
+        if (tag) { autoUpdater.setFeedURL({ provider: 'generic', url: `${downloadBase}/${tag}` }); }
+    } catch (error) {
+        console.error('[mise à jour] choix de la Release impossible :', error && error.message ? error.message : error);
+    }
 }
 
 function busy() {
@@ -41,6 +82,7 @@ async function check(manual) {
     }
     set({ status: 'checking', manual: !!manual, message: '' });
     try {
+        await resolveFeed();
         await autoUpdater.checkForUpdates();
     } catch (error) {
         onError(error);
@@ -81,8 +123,14 @@ function init(options) {
     ipcMain.handle('update:check', (event) => (options.fromApp(event) ? check(true) : null));
     ipcMain.on('update:install', (event) => { if (options.fromApp(event)) { install(options.beforeQuit); } });
 
-    const localFeed = process.env.HAIKO_UPDATE_URL && LOCAL_FEED.test(process.env.HAIKO_UPDATE_URL)
+    localFeed = process.env.HAIKO_UPDATE_URL && LOCAL_FEED.test(process.env.HAIKO_UPDATE_URL)
         ? process.env.HAIKO_UPDATE_URL : null;
+    // Tests : faux « GitHub » local (liste des Releases + dossier de téléchargement), jamais une adresse distante.
+    if (process.env.HAIKO_RELEASES_API && LOCAL_FEED.test(process.env.HAIKO_RELEASES_API) &&
+        process.env.HAIKO_DOWNLOAD_BASE && LOCAL_FEED.test(process.env.HAIKO_DOWNLOAD_BASE)) {
+        releasesApi = process.env.HAIKO_RELEASES_API;
+        downloadBase = process.env.HAIKO_DOWNLOAD_BASE.replace(/\/$/, '');
+    }
 
     // En développement (application non installée) il n'y a rien à mettre à jour, sauf pour un test avec un serveur local.
     if (!app.isPackaged && !localFeed) { return; }
@@ -111,6 +159,7 @@ function init(options) {
 
 module.exports = {
     init,
+    pickFeedTag,
     check,
     install,
     getState: () => state

@@ -48,6 +48,123 @@
         player.classList.toggle('is-playing', state === 'playing');
         player.classList.toggle('is-loading', state === 'loading');
         playBtn.setAttribute('aria-label', wantPlaying ? 'Mettre en pause' : 'Écouter la radio');
+        if (state === 'playing') { startEqualizer(); }
+    }
+
+    // --- Égaliseur : les 7 barres suivent le son réellement joué (analyse via Web Audio) ---
+    // Même principe que sur le site : on sépare le son en 7 bandes de fréquences (graves → aigus) et chaque barre
+    // monte avec l'énergie de sa bande. Sans analyse possible (Android, mouvement réduit demandé au système…), les barres
+    // gardent leur animation décorative habituelle.
+
+    var eqEl = player.querySelector('.equalizer');
+    var eqBars = player.querySelectorAll('.equalizer span');
+    // Bandes de fréquences, des graves aux aigus (Hz)
+    var EQ_BANDS = [[60, 150], [150, 300], [300, 600], [600, 1200], [1200, 2400], [2400, 4800], [4800, 9600]];
+    var audioCtx = null, analyser = null, gainNode = null, freqData = null;
+    var graphTried = false;
+    var eqFrame = 0, eqDead = false, eqHadSignal = false, eqSilentSince = 0, eqLastTime = 0;
+    var eqLevels = [0, 0, 0, 0, 0, 0, 0];
+    // Plage récente de chaque barre (plus haut / plus bas niveau des dernières secondes) : chaque barre
+    // s'adapte au morceau et aux instruments de sa bande, plutôt que d'être écrasée au maximum.
+    var eqPeaks = null, eqFloors = null;
+
+    var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    // Sur Android, le son est joué par le téléphone (pas par cette page) : rien à analyser.
+    var eqSupported = !NATIVE && !reduceMotion && !!(window.AudioContext || window.webkitAudioContext);
+
+    // Le volume passe par un « gain » placé APRÈS l'analyse : baisser le son ne réduit donc pas la hauteur des barres.
+    function applyVolume() {
+        var v = volume.value / 100;
+        if (gainNode) { gainNode.gain.value = v; audio.volume = 1; }
+        else { audio.volume = v; }
+    }
+
+    // À appeler pendant une commande de lecture (le navigateur n'autorise le son Web Audio qu'après une action de l'utilisateur).
+    function ensureAudioGraph() {
+        if (!eqSupported) { return; }
+        if (!graphTried) {
+            graphTried = true;
+            try {
+                var AC = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AC();
+                var source = audioCtx.createMediaElementSource(audio);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 1024;
+                analyser.smoothingTimeConstant = 0.5;
+                gainNode = audioCtx.createGain();
+                source.connect(analyser);
+                analyser.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                freqData = new Uint8Array(analyser.frequencyBinCount);
+                applyVolume();
+            } catch (e) {
+                analyser = null; // pas d'analyse possible : animation décorative
+            }
+        }
+        if (audioCtx && audioCtx.state !== 'running') {
+            var p = audioCtx.resume();
+            if (p && p.catch) { p.catch(function () {}); }
+        }
+    }
+
+    function stopEqualizer() {
+        if (eqFrame) { cancelAnimationFrame(eqFrame); eqFrame = 0; }
+        if (eqEl) { eqEl.classList.remove('is-reactive'); }
+        eqBars.forEach(function (b) { b.style.removeProperty('--lvl'); });
+        eqLevels = [0, 0, 0, 0, 0, 0, 0];
+        eqPeaks = null;
+        eqFloors = null;
+        eqLastTime = 0;
+    }
+
+    function eqTick(now) {
+        if (!player.classList.contains('is-playing')) { eqFrame = 0; stopEqualizer(); return; }
+        eqFrame = requestAnimationFrame(eqTick);
+
+        analyser.getByteFrequencyData(freqData);
+        var binHz = audioCtx.sampleRate / analyser.fftSize;
+        var raw = [], total = 0;
+        for (var b = 0; b < EQ_BANDS.length; b++) {
+            var i0 = Math.max(1, Math.floor(EQ_BANDS[b][0] / binHz));
+            var i1 = Math.max(i0 + 1, Math.ceil(EQ_BANDS[b][1] / binHz));
+            var sum = 0;
+            for (var i = i0; i < i1 && i < freqData.length; i++) { sum += freqData[i]; }
+            total += sum;
+            raw[b] = sum / ((i1 - i0) * 255);
+        }
+
+        if (total > 0) {
+            eqHadSignal = true;
+            eqSilentSince = 0;
+        } else if (!eqHadSignal) {
+            // Aucune donnée depuis le début de la lecture : l'analyse est bloquée → animation décorative.
+            if (!eqSilentSince) { eqSilentSince = now; }
+            if (now - eqSilentSince > 4000) { eqDead = true; eqFrame = 0; stopEqualizer(); return; }
+            return;
+        }
+
+        // Chaque barre se situe entre le plus bas et le plus haut niveau récents de sa bande.
+        // Ces repères se resserrent (≈ 0,3 par seconde) pour suivre le morceau et oublier vite un pic de début de flux.
+        var dt = eqLastTime ? Math.min(100, now - eqLastTime) : 16;
+        eqLastTime = now;
+        var drift = 0.0003 * dt;
+        if (!eqPeaks) { eqPeaks = raw.slice(); eqFloors = raw.slice(); }
+        eqEl.classList.add('is-reactive');
+        for (var k = 0; k < eqBars.length; k++) {
+            eqPeaks[k] = Math.max(raw[k], eqPeaks[k] - drift);
+            eqFloors[k] = Math.min(raw[k], eqFloors[k] + drift);
+            var range = Math.max(eqPeaks[k] - eqFloors[k], 0.1); // évite d'amplifier le simple bruit
+            var target = Math.pow(Math.max(0, Math.min(1, (raw[k] - eqFloors[k]) / range)), 1.3);
+            var cur = eqLevels[k];
+            cur += (target - cur) * (target > cur ? 0.6 : 0.18); // montée rapide, descente douce
+            eqLevels[k] = cur;
+            eqBars[k].style.setProperty('--lvl', cur.toFixed(3));
+        }
+    }
+
+    function startEqualizer() {
+        if (!analyser || eqDead || eqFrame) { return; }
+        eqFrame = requestAnimationFrame(eqTick);
     }
 
     function showMode(next) {
@@ -163,6 +280,9 @@
     // useHls : on force le HLS (c'est le secours du mode standard).
     function start(useHls) {
         if (NATIVE) { nativeStart(); return; }
+        ensureAudioGraph();
+        stopEqualizer(); // repart d'un état propre (annule une animation restée en attente)
+        eqHadSignal = false;
         wantPlaying = true;
         hlsRetries = 0;
         var id = ++startId;
@@ -265,11 +385,11 @@
     if (!NATIVE) {
         var savedVolume = parseInt(load('radio-volume') || '', 10);
         if (!isNaN(savedVolume) && savedVolume >= 0 && savedVolume <= 100) { volume.value = String(savedVolume); }
-        audio.volume = volume.value / 100;
+        applyVolume();
     }
     volume.addEventListener('input', function () {
         if (NATIVE) { nativeVolumeInput(); return; }
-        audio.volume = volume.value / 100;
+        applyVolume();
         store('radio-volume', volume.value);
     });
 

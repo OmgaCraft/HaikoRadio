@@ -104,6 +104,25 @@ app.whenReady().then(async () => {
             src: (a.currentSrc || '').slice(0, 70)
         }; })()`);
         check('lecture ' + label, s.playing && s.t > 1 && /is-playing/.test(s.cls), `${s.status} · ${s.t}s · ${s.src}`);
+
+        // Égaliseur : les 7 barres doivent suivre le son réellement joué (analyse du flux), pas une animation fixe.
+        const sample = () => js(`(() => ({
+            reactive: document.querySelector('.equalizer').classList.contains('is-reactive'),
+            levels: [...document.querySelectorAll('.equalizer span')].map((b) => parseFloat(b.style.getPropertyValue('--lvl')))
+        }))()`);
+        const samples = [];
+        for (let i = 0; i < 6; i++) { samples.push(await sample()); await sleep(250); }
+        const last = samples[samples.length - 1];
+        const distinct = new Set(last.levels.map((v) => v.toFixed(2))).size;
+        let movement = 0;
+        for (let k = 0; k < 7; k++) {
+            const vals = samples.map((x) => x.levels[k]).filter((v) => !Number.isNaN(v));
+            if (vals.length) { movement = Math.max(movement, Math.max(...vals) - Math.min(...vals)); }
+        }
+        check('égaliseur ' + label + ' : barres réactives au son', last.reactive && last.levels.length === 7 && distinct >= 3 && movement > 0.05,
+            `réactif=${last.reactive}, ${distinct} niveaux distincts, mouvement=${movement.toFixed(2)}, barres=[${last.levels.map((v) => v.toFixed(2)).join(' ')}]`);
+        const volumeViaGain = await js(`document.getElementById('audio').volume === 1`);
+        check('volume ' + label + ' : réglé après l\'analyse (les barres ne baissent pas avec le volume)', volumeViaGain);
         return s;
     };
     await play('qualité standard', null);
@@ -139,6 +158,11 @@ app.whenReady().then(async () => {
     await sleep(600);
     const stopped = await js(`document.getElementById('audio').paused && !document.getElementById('audio').hasAttribute('src')`);
     check('arrêt propre (flux coupé)', stopped);
+    const barsReset = await js(`(() => {
+        const eq = document.querySelector('.equalizer');
+        return !eq.classList.contains('is-reactive') && [...eq.querySelectorAll('span')].every((b) => b.style.getPropertyValue('--lvl') === '');
+    })()`);
+    check('arrêt : les barres reviennent à leur état de repos', barsReset);
 
     // 4) Page Planning + thème clair
     await js(`document.querySelector('.topbar [data-view-link=planning]').click()`);

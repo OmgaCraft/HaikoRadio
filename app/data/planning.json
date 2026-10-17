@@ -51,7 +51,7 @@
         "3": [
             { "start": "00:00", "end": "04:00", "show": "lofi" },
             { "start": "15:00", "end": "17:00", "show": "monde" },
-            { "start": "19:00", "end": "23:00", "show": "japonais" },
+            { "start": "19:00", "end": "23:00", "show": "anime" },
             { "start": "23:00", "end": "24:00", "show": "lofi" }
         ],
         "4": [

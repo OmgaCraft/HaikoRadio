@@ -23,3 +23,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Fichier de configuration temporaire des tests de mise à jour en mode développement
+desktop/dev-app-update.yml

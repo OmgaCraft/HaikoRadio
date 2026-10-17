@@ -77,3 +77,12 @@ img { -webkit-user-drag: none; user-drag: none; }
 .link-button:hover:not(:disabled) { opacity: 1; }
 .link-button:disabled { opacity: 0.45; cursor: default; text-decoration: none; }
 .link-button[hidden] { display: none; }
+
+/* ---- Égaliseur réactif : la hauteur de chaque barre suit le son (variable --lvl, de 0 à 1, mise à jour par player.js) ---- */
+
+.player .equalizer.is-reactive span {
+    animation: none;
+    opacity: 1;
+    height: calc(10% + var(--lvl, 0) * 90%);
+    transition: height 60ms linear;
+}
