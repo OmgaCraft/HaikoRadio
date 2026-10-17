@@ -169,8 +169,11 @@ jobs:
 
       - name: Installer le paquet .rpm avec dnf
         run: |
-          ls -la paquets
-          dnf install -y ./paquets/*.rpm
+          find paquets -type f | head -20
+          # L'arborescence du téléchargement est conservée (paquets/dist-linux/…) : on cherche le .rpm où qu'il soit.
+          RPM_FILE=$(find paquets -name '*.rpm' | head -1)
+          echo "paquet : $RPM_FILE"
+          dnf install -y "./$RPM_FILE"
           echo '--- fichiers installés'; ls -la /opt/HaikoRadio | head -8
           echo '--- bac à sable (chrome-sandbox doit être setuid root : -rwsr-xr-x)'; ls -la /opt/HaikoRadio/chrome-sandbox
           echo '--- paquet installé'; rpm -qa | grep -i haiko
