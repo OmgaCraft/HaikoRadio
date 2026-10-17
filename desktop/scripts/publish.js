@@ -105,7 +105,11 @@ async function api(token, method, url, body, headers = {}) {
     const head = git('rev-parse', 'HEAD');
     if (head !== git('rev-parse', 'origin/main')) { fail('le code local n\'est pas celui de GitHub (envoie-le avec git push).'); }
     const commitTime = Number(git('log', '-1', '--format=%ct', 'HEAD', '--', ...packaged)) * 1000;
-    if (fs.statSync(mainFile.path).mtimeMs < commitTime) { fail(`l'installateur est plus ancien que le dernier changement de l'application : refabrique-le (${buildCommand}).`); }
+    // Date de fabrication : celle écrite dans le fichier d'information (heure universelle, fiable même pour des fichiers
+    // téléchargés depuis GitHub dont la date de fichier est faussée par le fuseau horaire) ; à défaut, la date du fichier.
+    const releaseDate = /^releaseDate:\s*'?([^'\n]+)'?\s*$/m.exec(yml);
+    const builtAt = releaseDate && !Number.isNaN(Date.parse(releaseDate[1])) ? Date.parse(releaseDate[1]) : fs.statSync(mainFile.path).mtimeMs;
+    if (builtAt < commitTime) { fail(`l'installateur est plus ancien que le dernier changement de l'application : refabrique-le (${buildCommand}).`); }
     console.log(`\nCode de l'application : identique à GitHub (HEAD ${head.slice(0, 7)}). Installateur fabriqué après le dernier changement.`);
 
     if (!publish) {
