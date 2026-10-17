@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 40
     defaults:
       run:
+        shell: bash # bash -eo pipefail : un échec avant « | tee » n'est plus masqué
         working-directory: desktop
     env:
       DIST_DIR: ${{ github.workspace }}/dist-linux
@@ -59,14 +60,19 @@ jobs:
         continue-on-error: true
         env:
           HAIKO_SMOKE_DIR: ${{ github.workspace }}/captures
-        run: xvfb-run -a --server-args="-screen 0 1280x900x24" npx electron . --no-sandbox 2>&1 | tee "$RUNNER_TEMP/smoke.log"
+        timeout-minutes: 8
+        run: |
+          eval "$(dbus-launch --sh-syntax)"
+          mkdir -p "$GITHUB_WORKSPACE/captures"
+          # --disable-gpu : un serveur n'a pas de carte graphique
+          xvfb-run -a --server-args="-screen 0 1280x900x24" npx electron . --no-sandbox --disable-gpu 2>&1 | tee "$GITHUB_WORKSPACE/captures/smoke.log"
 
       - name: Résumé du test automatique
         if: always()
         run: |
           echo '### Test automatique (code source)' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES)|^ - ' "$RUNNER_TEMP/smoke.log" | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || true
+          grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES)|^ - ' "$GITHUB_WORKSPACE/captures/smoke.log" | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fabriquer l'AppImage et le paquet .deb
@@ -83,20 +89,26 @@ jobs:
       - name: Lancer l'AppImage fabriquée et vérifier qu'elle fonctionne
         id: appimage
         continue-on-error: true
+        timeout-minutes: 8
         run: |
+          eval "$(dbus-launch --sh-syntax)"
+          mkdir -p "$GITHUB_WORKSPACE/captures"
           VERSION=$(node -p "require('./package.json').version")
           chmod +x "$DIST_DIR/HaikoRadio-$VERSION.AppImage"
           # Volontairement SANS --no-sandbox : l'application doit gérer seule les bureaux qui l'interdisent.
           xvfb-run -a --server-args="-screen 0 1280x900x24" node test/packaged-check.js \
-            "$DIST_DIR/HaikoRadio-$VERSION.AppImage" --appimage-extract-and-run 2>&1 | tee "$RUNNER_TEMP/appimage.log"
+            "$DIST_DIR/HaikoRadio-$VERSION.AppImage" --appimage-extract-and-run --disable-gpu 2>&1 | tee "$GITHUB_WORKSPACE/captures/appimage.log"
 
       - name: Installer le paquet .deb et vérifier le programme installé
         id: deb
         continue-on-error: true
+        timeout-minutes: 8
         run: |
+          eval "$(dbus-launch --sh-syntax)"
+          mkdir -p "$GITHUB_WORKSPACE/captures"
           sudo apt-get install -y "$DIST_DIR"/*.deb
           ls -la /opt/HaikoRadio | head -5
-          xvfb-run -a --server-args="-screen 0 1280x900x24" node test/packaged-check.js /opt/HaikoRadio/haikoradio 2>&1 | tee "$RUNNER_TEMP/deb.log"
+          xvfb-run -a --server-args="-screen 0 1280x900x24" node test/packaged-check.js /opt/HaikoRadio/haikoradio --disable-gpu 2>&1 | tee "$GITHUB_WORKSPACE/captures/deb.log"
 
       - name: Résumé des vérifications des fichiers fabriqués
         if: always()
@@ -104,7 +116,7 @@ jobs:
           for name in appimage deb; do
             echo "### Vérification : $name" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES|Erreur)' "$RUNNER_TEMP/$name.log" 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo '(pas de résultat)' >> "$GITHUB_STEP_SUMMARY"
+            grep -E '^(OK|ECHEC|--|Tout est bon|PROBLEMES|Erreur)' "$GITHUB_WORKSPACE/captures/$name.log" 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo '(pas de résultat)' >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           done
 
@@ -119,6 +131,7 @@ jobs:
             ${{ env.DIST_DIR }}/*.deb
             ${{ env.DIST_DIR }}/latest-linux.yml
             ${{ github.workspace }}/captures/*.png
+            ${{ github.workspace }}/captures/*.log
           if-no-files-found: warn
           retention-days: 14
 

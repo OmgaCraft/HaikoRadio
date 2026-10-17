@@ -15,6 +15,18 @@ const outDir = process.env.HAIKO_SMOKE_DIR ? path.resolve(process.env.HAIKO_SMOK
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const problems = [];
 
+// Garde-fous : un test qui se bloque ou qui plante doit s'arrêter en échec avec un message, jamais rester suspendu
+// (c'est ce qui est arrivé sur un serveur Linux sans carte graphique, où la capture d'écran échoue).
+const MAX_DURATION_MS = 5 * 60 * 1000;
+setTimeout(() => {
+    console.log('ECHEC : le test dépasse ' + MAX_DURATION_MS / 60000 + ' minutes (blocage)');
+    app.exit(1);
+}, MAX_DURATION_MS).unref();
+process.on('unhandledRejection', (error) => {
+    console.log('ECHEC : erreur inattendue pendant le test : ' + (error && error.message ? error.message : error));
+    app.exit(1);
+});
+
 app.whenReady().then(async () => {
     let win = null;
     for (let i = 0; i < 50 && !win; i++) { win = BrowserWindow.getAllWindows()[0]; await sleep(100); }
@@ -32,9 +44,14 @@ app.whenReady().then(async () => {
     const js = (code) => win.webContents.executeJavaScript(code);
     const shot = async (name) => {
         if (!outDir) { return; }
-        fs.mkdirSync(outDir, { recursive: true });
-        const img = await win.webContents.capturePage();
-        fs.writeFileSync(path.join(outDir, name + '.png'), img.toPNG());
+        try {
+            fs.mkdirSync(outDir, { recursive: true });
+            const img = await win.webContents.capturePage();
+            fs.writeFileSync(path.join(outDir, name + '.png'), img.toPNG());
+        } catch (error) {
+            // Pas de capture possible (serveur sans carte graphique…) : ce n'est pas un défaut de l'application.
+            console.log('--    capture « ' + name + ' » impossible : ' + (error && error.message ? error.message : error));
+        }
     };
     const check = (label, ok, detail) => {
         console.log((ok ? 'OK    ' : 'ECHEC ') + label + (detail !== undefined ? '  → ' + detail : ''));
