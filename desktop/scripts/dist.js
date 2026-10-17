@@ -19,9 +19,11 @@ const extra = args[0] === 'linux' ? args.slice(1) : args; // options supplément
 const defaultDir = path.join(os.tmpdir(), target === 'linux' ? 'haikoradio-dist-linux' : 'haikoradio-dist');
 const out = process.env.HAIKO_DIST_DIR || defaultDir;
 
+// « --publish never » : cet outil ne publie jamais rien lui-même (sur GitHub il essaierait de le faire et réclamerait un
+// jeton). La publication est une étape volontaire : voir scripts/publish.js. Les fichiers de mise à jour (latest*.yml) sont créés quand même.
 const builderArgs = target === 'linux'
-    ? ['--linux', 'AppImage', 'deb', '--x64']
-    : ['--win', '--x64'];
+    ? ['--linux', 'AppImage', 'deb', '--x64', '--publish', 'never']
+    : ['--win', '--x64', '--publish', 'never'];
 
 const result = spawnSync(
     'npx',
