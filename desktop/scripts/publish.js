@@ -73,14 +73,17 @@ async function api(token, method, url, body, headers = {}) {
         fail(`latest.yml ne correspond pas à la version ${version} : refabrique l'installateur.`);
     }
 
-    // 2) Le code doit être enregistré, envoyé, et plus ancien que l'installateur
-    if (git('status', '--porcelain') !== '') { fail('des modifications ne sont pas enregistrées (commit). Enregistre-les et envoie-les sur GitHub d\'abord.'); }
+    // 2) Le code de l'installateur doit être enregistré, envoyé, et plus ancien que l'installateur.
+    // Le dépôt est partagé avec l'application Android : on ne regarde que ce qui entre réellement dans l'installateur
+    // (l'interface app/ et les fichiers de l'application Windows), pas android/ ni la documentation.
+    const packaged = ['app', 'desktop/main.js', 'desktop/preload.js', 'desktop/updater.js', 'desktop/package.json', 'desktop/package-lock.json', 'desktop/build'];
+    if (git('status', '--porcelain', '--', ...packaged) !== '') { fail('des modifications de l\'application ne sont pas enregistrées (commit). Enregistre-les et envoie-les sur GitHub d\'abord.'); }
     git('fetch', 'origin', 'main');
     const head = git('rev-parse', 'HEAD');
     if (head !== git('rev-parse', 'origin/main')) { fail('le code local n\'est pas celui de GitHub (envoie-le avec git push).'); }
-    const commitTime = Number(git('log', '-1', '--format=%ct', 'HEAD')) * 1000;
-    if (fs.statSync(files[0].path).mtimeMs < commitTime) { fail('l\'installateur est plus ancien que le dernier commit : refabrique-le (npm run dist).'); }
-    console.log(`\nCode : commit ${head.slice(0, 7)}, identique à GitHub. Installateur fabriqué après ce commit.`);
+    const commitTime = Number(git('log', '-1', '--format=%ct', 'HEAD', '--', ...packaged)) * 1000;
+    if (fs.statSync(files[0].path).mtimeMs < commitTime) { fail('l\'installateur est plus ancien que le dernier changement de l\'application : refabrique-le (npm run dist).'); }
+    console.log(`\nCode de l'application : identique à GitHub (HEAD ${head.slice(0, 7)}). Installateur fabriqué après le dernier changement.`);
 
     if (!publish) {
         console.log('\nSimulation terminée : tout est prêt. Pour publier pour de bon :  npm run publish -- --yes');
