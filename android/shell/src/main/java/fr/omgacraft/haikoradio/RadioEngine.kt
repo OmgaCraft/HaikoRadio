@@ -11,8 +11,10 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.source.MediaLoadData
 
 /** Les deux réglages de qualité proposés à l'utilisateur. */
@@ -85,6 +87,17 @@ class RadioEngine(private val exo: ExoPlayer, private val onChanged: (Bundle) ->
     }
 
     private val analytics = object : AnalyticsListener {
+        // La carte son vient de s'ouvrir : sa mémoire tampon donne le retard entre l'analyse du son (égaliseur) et le son entendu.
+        override fun onAudioTrackInitialized(eventTime: AnalyticsListener.EventTime, audioTrackConfig: AudioSink.AudioTrackConfig) {
+            val channelCount = Integer.bitCount(audioTrackConfig.channelConfig)
+            val frameSize = Util.getPcmFrameSize(audioTrackConfig.encoding, channelCount)
+            if (frameSize > 0 && audioTrackConfig.sampleRate > 0) {
+                val durationMs = audioTrackConfig.bufferSize.toLong() / frameSize * 1000L / audioTrackConfig.sampleRate
+                AudioLevels.onAudioOutputReady(durationMs)
+                Log.i(TAG, "SORTIE AUDIO: tampon ${durationMs} ms, ${audioTrackConfig.sampleRate} Hz, $channelCount canaux -> retard de l'egaliseur ${AudioLevels.outputDelayMs} ms")
+            }
+        }
+
         override fun onDownstreamFormatChanged(eventTime: AnalyticsListener.EventTime, mediaLoadData: MediaLoadData) {
             val f = mediaLoadData.trackFormat ?: return
             if (f.sampleMimeType?.startsWith("audio") == true || f.codecs?.startsWith("mp4a") == true) {

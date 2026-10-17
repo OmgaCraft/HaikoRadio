@@ -1,11 +1,16 @@
 package fr.omgacraft.haikoradio
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -27,7 +32,21 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        exo = ExoPlayer.Builder(this)
+        // Même lecteur audio qu'à l'habitude, avec un « espion » sur les échantillons envoyés à la carte son :
+        // il alimente l'égaliseur de la page (voir AudioLevels). Il ne modifie jamais le son.
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(TeeAudioProcessor(AudioLevels.sink)))
+                .build()
+        }
+
+        exo = ExoPlayer.Builder(this, renderers)
             // Musique : le lecteur se met en pause si un appel arrive, et reprend la main ensuite.
             .setAudioAttributes(
                 AudioAttributes.Builder()

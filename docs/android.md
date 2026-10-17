@@ -75,6 +75,29 @@ du casque, pas seulement du bouton de la page.
 **Attention aux appels** : Android refuse un appel de méthode dont le nombre d'arguments ne correspond pas. Appeler
 `HaikoNative.play(mode)`, `HaikoNative.stop()` sans argument. (`stop(undefined)` est toléré, mais mieux vaut ne rien passer.)
 
+## Égaliseur (les 7 barres suivent le son)
+
+Comme sur le site, les 7 barres verticales suivent le son réellement joué. Sur le site, c'est le navigateur qui analyse la balise
+`<audio>` ; dans l'application, le son est joué par le lecteur Android, donc l'analyse est faite côté natif :
+
+1. **Analyse** (`AudioLevels.kt`) : un « espion » (`TeeAudioProcessor`) lit les échantillons juste avant la carte son, sans jamais
+   modifier le son. Même calcul que l'analyseur du navigateur (fenêtre de Blackman, FFT de 1024 points, lissage 0,5, échelle -100 à
+   -30 dB), moyenné sur les mêmes 7 bandes de fréquences que le site (60 Hz à 9,6 kHz).
+2. **Envoi** : environ 30 fois par seconde, l'écran envoie à la page l'événement `haiko-native-levels`
+   (`e.detail.bars` : 7 niveaux de 0 à 1, des graves aux aigus).
+3. **Affichage** (`assets/haiko-equalizer.js`, injecté par l'application après le chargement de la page) : même mise en forme que le
+   site (chaque barre entre le plus bas et le plus haut niveau récents de sa bande, montée rapide, descente douce). Le point d'entrée
+   est celui de l'interface partagée : classe `is-reactive` sur `.equalizer` et variable `--lvl` (0 à 1) sur les 7 `<span>` ; la hauteur
+   est calculée par `app.css`. Dès que la lecture s'arrête, les barres retrouvent leur animation d'origine.
+
+À savoir :
+- **Rien n'est calculé ni envoyé quand l'écran est éteint ou que l'application est en arrière-plan** (aucune batterie dépensée pour rien).
+- Le volume de l'application n'a pas d'effet sur les barres (l'analyse est avant le réglage du volume, comme sur le site).
+- **Synchronisation** : les barres sont retardées de la durée de la mémoire tampon de la carte son (mesurée à l'ouverture de la sortie
+  audio, +20 ms) pour tomber en même temps que le son entendu. C'est une estimation : un casque Bluetooth ajoute son propre retard,
+  que l'application ne peut pas connaître. Constante à ajuster si besoin : `AudioLevels.onAudioOutputReady`.
+- L'option « réduire les animations » d'Android désactive l'égaliseur (l'animation douce d'origine est conservée).
+
 ## Mise à jour automatique
 
 L'application se met à jour depuis les **Releases GitHub** du dépôt, sans passer par un magasin d'applications.

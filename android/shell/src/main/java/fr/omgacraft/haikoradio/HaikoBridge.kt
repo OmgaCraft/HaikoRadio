@@ -92,6 +92,17 @@ class HaikoBridge(private val host: Host) {
         /** Reçu par la page au chargement, au retour au premier plan et à chaque réglage du volume de l'application : `e.detail.volume` (0 à 100). */
         const val VOLUME_EVENT_NAME = "haiko-native-volume"
 
+        /**
+         * Les 7 niveaux de l'égaliseur (0 à 1, des graves aux aigus), envoyés environ 30 fois par seconde tant que la radio
+         * joue et que l'écran est visible : `window.addEventListener('haiko-native-levels', e => e.detail.bars)`.
+         */
+        const val LEVELS_EVENT_NAME = "haiko-native-levels"
+
+        fun levelsScript(bands: FloatArray): String {
+            val values = bands.joinToString(",") { String.format(java.util.Locale.US, "%.3f", it) }
+            return "window.dispatchEvent(new CustomEvent('$LEVELS_EVENT_NAME',{detail:{bars:[$values]}}));"
+        }
+
         fun volumeScript(percent: Int): String =
             "window.dispatchEvent(new CustomEvent('$VOLUME_EVENT_NAME',{detail:{volume:$percent}}));"
 

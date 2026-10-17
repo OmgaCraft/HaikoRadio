@@ -7,6 +7,9 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
@@ -128,11 +131,49 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         emitVolume()
         updateUi.onResume()
         updateUi.checkOnStart() // au plus une vérification par heure
+        startEqualizer()
     }
 
     override fun onPause() {
+        stopEqualizer()
         webView.onPause()
         super.onPause()
+    }
+
+    // ---- Égaliseur : les 7 barres suivent le son (analyse faite par le lecteur, voir AudioLevels) ----
+
+    private val levelsHandler = Handler(Looper.getMainLooper())
+    private var lastLevelsLog = 0L
+
+    private val levelsTick = object : Runnable {
+        override fun run() {
+            AudioLevels.bandsNow()?.let { bands ->
+                webView.evaluateJavascript(HaikoBridge.levelsScript(bands), null)
+                if (BuildConfig.DEBUG && SystemClock.elapsedRealtime() - lastLevelsLog > 1000) {
+                    lastLevelsLog = SystemClock.elapsedRealtime()
+                    Log.i("HaikoLevels", "bandes=" + bands.joinToString(" ") { "%.2f".format(it) })
+                }
+            }
+            levelsHandler.postDelayed(this, LEVELS_INTERVAL_MS)
+        }
+    }
+
+    /** Seulement quand l'écran est visible : rien n'est calculé ni envoyé en arrière-plan ou écran éteint. */
+    private fun startEqualizer() {
+        AudioLevels.enabled = true
+        levelsHandler.removeCallbacks(levelsTick)
+        levelsHandler.post(levelsTick)
+    }
+
+    private fun stopEqualizer() {
+        levelsHandler.removeCallbacks(levelsTick)
+        AudioLevels.enabled = false
+    }
+
+    /** Script qui anime les barres dans la page (fichier assets/haiko-equalizer.js), lu une seule fois. */
+    private val equalizerScript: String by lazy {
+        val code = assets.open("haiko-equalizer.js").bufferedReader().use { it.readText() }
+        if (BuildConfig.DEBUG) "window.__haikoEqDebug = true;\n$code" else code
     }
 
     override fun onDestroy() {
@@ -191,6 +232,7 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
             override fun onPageFinished(view: WebView, url: String?) {
                 emitState()
                 emitVolume()
+                view.evaluateJavascript(equalizerScript, null) // les barres suivent le son (idempotent : une seule installation)
             }
         }
     }
@@ -356,6 +398,7 @@ class MainActivity : ComponentActivity(), HaikoBridge.Host {
         private const val APP_HOST = "appassets.androidplatform.net"
         private const val RADIO_HOST = "radio.omgacraft.fr"
         private const val BACKGROUND = 0xFF0A0C11.toInt()
+        private const val LEVELS_INTERVAL_MS = 33L // environ 30 images par seconde
 
         /** Action du raccourci « Rechercher une mise à jour » (appui long sur l'icône de l'application). */
         const val ACTION_CHECK_UPDATE = "fr.omgacraft.haikoradio.CHECK_UPDATE"
